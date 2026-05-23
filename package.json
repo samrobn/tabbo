@@ -1,0 +1,62 @@
+{
+	"name": "tabbo",
+	"version": "0.1.0-alpha.2",
+	"private": true,
+	"type": "module",
+	"description": "Lute tablature typesetter - Electrobun desktop app wrapping C++ engine",
+	"scripts": {
+		"start": "vite build && electrobun dev",
+		"dev": "electrobun dev --watch",
+		"dev:hmr": "concurrently \"bun run hmr\" \"bun run start\"",
+		"hmr": "vite --port 5173",
+		"build": "vite build && electrobun build",
+		"build:canary": "vite build && electrobun build --env=canary",
+		"build:stable": "vite build && electrobun build --env=stable",
+		"build:engine": "cd engine && make",
+		"test": "bun test src/bun/",
+		"evals": "bun run evals/run.ts"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/samrobn/tabbo.git"
+	},
+	"homepage": "https://github.com/samrobn/tabbo",
+	"bugs": {
+		"url": "https://github.com/samrobn/tabbo/issues"
+	},
+	"keywords": [
+		"lute",
+		"tablature",
+		"music",
+		"typesetting",
+		"renaissance",
+		"baroque",
+		"electrobun",
+		"desktop"
+	],
+	"author": "Wayne Cripps (original), samrobn (desktop app)",
+	"license": "SEE LICENSE IN LICENSE",
+	"dependencies": {
+		"electrobun": "1.16.0"
+	},
+	"devDependencies": {
+		"@codemirror/commands": "^6.10.0",
+		"@codemirror/language": "^6.11.3",
+		"@codemirror/state": "^6.5.2",
+		"@codemirror/view": "^6.38.8",
+		"@lezer/highlight": "^1.2.3",
+		"@napi-rs/canvas": "0.1.97",
+		"@tailwindcss/postcss": "^4.1.12",
+		"@types/bun": "latest",
+		"@vitejs/plugin-vue": "^5.2.1",
+		"autoprefixer": "^10.4.20",
+		"codemirror": "^6.0.2",
+		"concurrently": "^9.1.0",
+		"postcss": "^8.5.6",
+		"tailwindcss": "^4.1.12",
+		"typescript": "^5.7.2",
+		"vite": "^6.0.3",
+		"vue": "^3.5.13",
+		"vue-tsc": "^2.2.0"
+	}
+}

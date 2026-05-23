@@ -1,0 +1,6 @@
+# Include source, fonts, and Makefile for multi-stage build
+*
+!src/
+!include/
+!fonts/
+!Makefile

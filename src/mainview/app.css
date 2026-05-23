@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/*
+ * Tab font families — WOFF2 glyphs from engine/fonts/woff2/.
+ * font-display: block prevents fallback rendering before the font loads;
+ * glyphs have no readable fallback and partial render would look wrong.
+ * The /fonts/ path is served by Vite from src/mainview/public/fonts/.
+ */
+@font-face { font-family: "lute6";   src: url("/fonts/lute6.woff2")   format("woff2"); font-display: block; }
+@font-face { font-family: "lute7";   src: url("/fonts/lute7.woff2")   format("woff2"); font-display: block; }
+@font-face { font-family: "lute8";   src: url("/fonts/lute8.woff2")   format("woff2"); font-display: block; }
+@font-face { font-family: "lute85";  src: url("/fonts/lute85.woff2")  format("woff2"); font-display: block; }
+@font-face { font-family: "lute9";   src: url("/fonts/lute9.woff2")   format("woff2"); font-display: block; }
+@font-face { font-family: "blute6";  src: url("/fonts/blute6.woff2")  format("woff2"); font-display: block; }
+@font-face { font-family: "blute7";  src: url("/fonts/blute7.woff2")  format("woff2"); font-display: block; }
+@font-face { font-family: "blute8";  src: url("/fonts/blute8.woff2")  format("woff2"); font-display: block; }
+@font-face { font-family: "blute85"; src: url("/fonts/blute85.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "blute9";  src: url("/fonts/blute9.woff2")  format("woff2"); font-display: block; }
+@font-face { font-family: "tlute6";  src: url("/fonts/tlute6.woff2")  format("woff2"); font-display: block; }
+@font-face { font-family: "tlute7";  src: url("/fonts/tlute7.woff2")  format("woff2"); font-display: block; }
+@font-face { font-family: "tlute8";  src: url("/fonts/tlute8.woff2")  format("woff2"); font-display: block; }
+@font-face { font-family: "tlute9";  src: url("/fonts/tlute9.woff2")  format("woff2"); font-display: block; }
+
+@font-face {
+    font-family: 'TabboBody';
+    src: url('/body-fonts/Tinos-Regular.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	font-family:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+		Cantarell, sans-serif;
+}
+
+#app {
+	min-height: 100vh;
+}

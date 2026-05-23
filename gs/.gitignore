@@ -1,0 +1,5 @@
+# Build artifacts
+build/
+
+# Built binary (25MB, rebuild via: bash build-gs.sh)
+gs-minimal
