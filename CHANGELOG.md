@@ -6,9 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.1.0-alpha.2] - 2026-05-23
+## [0.1.0-alpha.3] - 2026-05-23
 
-> **Manual re-download required.** Alpha.1 doesn't include the in-app updater (it's new in this release), so the update modal will never appear in your installed copy. Download alpha.2 manually from the [releases page](https://github.com/samrobn/tabbo/releases/latest) once to bootstrap. From alpha.2 onwards, updates land in-app.
+### Changed
+
+- README install instructions clarified: link to the releases page, drop stale "private testers" framing.
+
+## [0.1.0-alpha.2] - 2026-05-23
 
 ### Added
 
@@ -31,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Preview stability: stopped flicker between successive recompiles.
 - Bundled lute tablature fonts (renaissance, baroque, thin variants) and Ghostscript for self-contained offline use.
 
-[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.2...HEAD
+[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.3]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/samrobn/tabbo/releases/tag/v0.1.0-alpha.1
