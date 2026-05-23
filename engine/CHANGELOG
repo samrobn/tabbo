@@ -1,0 +1,315 @@
+
+VERSION "4.3.108"
+Version updated  to add three ornaments for Jan
+all use the <!> format - stroke, stroke# (a double ornament) and half-cross
+
+VERSION "4.3.107"
+updated the date
+a few corrections to comments
+modified the barCount function to not number bar 1 when the piece starts with double barlines
+Added perfectum time signatures SI Si
+the * bar numbering system now takes  up to 5 characters
+Changed spacing between ornaments and characters, especially d, with Robinson fonts
+
+VERSION "4.3.106"
+changed the -pdf option to exec the gs command with options, including one to specify 
+letter paper size
+Also, change sprintf to snprintf to keep apple compiler happy
+
+VERSION "4.3.105
+A correction for < used as a dash ornament submitted by Paul Overell
+a fix to allow changing the number of staff lines on one page submitted by Paul Overell
+added perl program ps2pdf.pl
+
+later - the -tabfontpath is added
+
+VERSION "4.3.104"
+change file name length to be greater than 120 chars
+
+VERSION "4.3.103"
+make gray barline that don't count in bar numbering
+
+VERSION "4.3.102"
+fixes to make measure numbers print when used with double bar lines
+
+VERSION "4.3.101"
+fixed score on 7 and 8 course when a b or c is used rather than a
+
+VERSION "4.3.100"
+fixed spacing in titles with reduced fonts
+
+VERSION "4.3.99"
+a fix to grids with dotted notes, or extra flags for just some notes
+
+VERSION "4.3.98"
+added pragma once to all .h files, removed trailing whitespace for .cc files
+other changes for development tools
+
+VERSION "4.3.97"
+a lot of changes to the fonts and the formatting of baroque lute fonts
+
+VERSION "4.3.96"
+added short squat baroque f for Probert
+fixed flags where thin or other flag is specified for baroque, might need more work
+also worked on underbars and multiple f characters and brisee sign
+
+VERSION "4.3.95"
+for Jan - improved bar numbers, including changing them and letting the user
+select a number font to use.
+use of dot . as a barline that is counted by bar numbering (unless the dot 
+is followed by an X)
+also added way to set first measure number
+
+added r for *L* character for repeat and made it and the other repeat character 
+a bit smaller
+
+VERSION "4.3.94"
+fix top margins - add win.h to include stuff to quiet Visual Studio compiler
+
+VERSION "4.3.93"
+in tab_p.cc duplicated f->flag_flag to inside big loop when line starts with $
+because flag style was not being set in time to affect inter system spacing
+
+VERSION "4.3.92"
+added -no_space_after_note flag
+added -no_space_before_note flag
+
+VERSION "4.3.91"
+correction to -h (convert) option
+silenced a few compilation error warnings
+in $arg=val allow for quoted-printable $arg=3Dval
+made additions to get_tab_file to handle CContent statements in the file
+
+VERSION "4.3.90"
+
+added note name output to midi-dump.
+
+VERSION "5.3.89"
+
+VERSION "4.3.88"
+fix lute.mf to make spanish "perfect" time sig work again
+
+VERSION "4.3.87"
+add  after-ornaments to the flag line
+fixed a bug in the print size of 1200dpi PS 
+
+VERSION "4.3.86"
+fix ^03 error where the caret shoed up in the final document
+Also fix tie at flag level
+
+VERSION "4.3.85"
+add SPANISH for music and score conversion or numeric spanish tab
+
+VERSION "4.3.84"  January 9 2015
+fix score for the N10 character
+
+VERSION "4.3.83"  September 8 2014
+fix del signe \0376  and added file name to midi file in -midi
+fix ^ ornament after e
+
+VERSION "4.3.82"   April 28 2014
+try and handle the funny quotes an dashes that Apple Mac TextEdit puts into a file
+without asking.
+
+VERSION "4.3.81"   April 18 2014
+added some padding for the x prefix ornament in pass1.cc
+
+VERSION "4.3.80"  Nov 20 2013
+declared main as int for apple's new compiler
+other changes to avoid apple compiler warnings
+
+VERSION "4.3.79"
+added a new character, a '/. for strum. use "q" for it.  
+Also $extended_character_set to print q-v rather than the ornament
+also, modifiet tfm.cc to allow for an apparently new header format
+emitted by mf, which omits the name and coding scheme
+also added -curly-e for baroque tablature - I though I already had this ??
+
+VERSION "4.3.78"
+added a warning when a double quote is used at the end of the line
+with nothing to quote
+	
+VERSION "4.3.77"
+allow negative value for $sys-skip
+new variable, $top_margin , takes points.
+
+VERSION "4.3.76"  jan 2012
+volume control for MIDI, fix for Mesngeau fourish and midi
+
+VERSION "4.3.75"  May 29 2011
+fix thick bar for four and five bar staves
+make 4 and 5 staff lines work with -h ital to french conversion
+(makes them work for whole file)
+
+VERSION "4.3.74"  April 11 2011
+fix cewnterline, broken in last title.cc fix
+
+VERSION "4.3.73"  Feb 21 2011
+adding seventh course to nmidi
+
+VERSION "4.3.72"  Feb 21 2011
+added a fix to title.cc for nmidi with lots of titles
+Just take the first one
+
+VERSION "4.3.71"  Feb 10 2011
+Big rewriting of title.cc
+
+VERSION "4.3.70" Nov 29 2010
+fix time signatures for seven lines
+
+VERSION "4.3.69" Nov 27 2010
+fixed repeat dots for seven staves
+
+VERSION "4.3.68"
+fixed buffer overflow on title.cc -  LLINE
+
+VERSION "4.3.67" November 21 2010
+fixed baroque 2, 3, 8 and 9 bourdons to work
+
+VERSION "4.3.66"  November 21 2020
+fixed do_nmidi to handle i l and k
+
+#define VERSION "4.3.65"  Oct 17 2010
+added a fix when a ] is followed by } or / in a title
+
+VERSION "4.3.64"  April 2009
+fixed offset of SO and So time signatures
+Added S0
+added -twelvedot
+July 09 check for null pointer pass1.cc 
+July 09 added a few checks for null pointers in notes.cc
+
+VERSION "4.3.63" Sept 2008
+fixed spacing on long s
+
+fixed nmidi "Breve"
+working in improving "sustain" function
+
+
+VERSION "4.3.60"  Mar 7 2008
+changed squiggle "Q" to vector drawn character which makes gs happier
+ Fix for [text interfering with score
+Fix for flat in tuning
+
+VERSION "4.3.59"  Feb 5 2008
+added check for -o with no file specified
+fixed score = j treated like i
+changed v to have no width when used without barline
+
+VERSION "4.3.58"  Dec 2007
+forgotten changes to dvi_f, nmidi, do_nmidi (probably for high notes)
+changed copyright dates to 2008
+
+VERSION "4.3.57   Sept 2007
+
+fixed conversion (-h) for n, m
+
+VERSION "4.3.56"  Feb 10 2007
+
+starting to add thin renaissance font
+
+VERSION "4.3.55"  Feb 8 2007
+
+In dvi_f added check for music only in middle of grids
+
+VERSION "4.3.54"  Feb 1 2007
+
+fixed "copyright" which somehow had gotten lost as a 
+first pass flag.
+
+VERSION "4.3.53"  Jan 30 2007
+
+fixed "$transpose" option
+fixed midi to ignore music with no tablature
+
+VERSION "4.3.52"  Jan 10 2007
+
+fixed mensural note positioning for -R7 reduction
+
+VERSION "4.3.50"  Nov 20 2006
+
+fixes to after ornament spacing
+added -staff-line-thickness option
+fix to certain slurs
+
+VERSION "4.3.49"  Oct 20 2006
+
+fixes to highlighting, -listfonts option fixed converting x after dotted
+note in midi and piano music
+Fixed missing time sig in second staff line
+
+VERSION "4.3.48"  Oct 6 2006
+
+many little fixes to compile in Visual Studio C++ 2005
+changes to nmidi.
+Old Mac preX and old windows stuff removed
+
+VERSION "4.3.47"  Sept 6 2006
+
+fix for single line music and 5 or 4 line in staff   tablature
+fixed "v" marks for non italian music, when used between barlines.  Sept 03 06
+
+VERSION "4.3.46"
+
+added $left_margin (set in points) and -guitar (to do music on one staff)
+
+VERSION "4.3.45"  July 11 2006
+
+Added inverted italian 3 flag note
+
+VERSION "4.3.44"  June 14 2006
+
+Made cosmetic fixes to SC, C especially when combined with S3
+
+VERSION "4.3.42"  Amrch 7 2006
+
+Midi file format 1, with a "tempo track"
+
+VERSION "4.3.41"  March 6 2006
+
+fixed bug in setting number of tracks
+
+VERSION "4.3.40"  Feb 16 06
+
+fixed o_staff_len default  so there is a begginging length for includes
+
+VERSION "4.3.36"  November 6 2005 -
+
+added source for midi-dump
+
+fixed buffer.cc for reading mac format EOL files, only
+chop off character after the \r if is it a \n, that is,
+a Windows format EOL
+
+new "milan" argument so that L de Milan style tab is
+converted to music correctly.
+
+
+VERSION "4.3.34"  July 15 2005
+
+July 15 changed score.c to ignore a flag of "O" for capirolla
+   ornaments
+July 13 changed dvi_f.cc to print flag for first triplet
+   if not baroque
+
+VERSION "4.3.33"  June 29 2005
+
+corrected is_music in notes.cc to allow 1234 for high notes, 
+also added ? as low F, and fixed ledger lines and stuff
+like that.  you can also use h, i for high a and b
+
+VERSION "4.3.32"  June 3 2005 -
+
+ added changelog
+ added 7 bourdon, rearranged baroque bourdons in font files, to
+avoid overlapping rests.  Changed baroque quarter rest to modern type.
+added R to badchar. fixed font building scripts.  added mk_300
+
+June 5 added "convert" option for N10 - N12 characters
+
+June 7 added $scribe option
+
+June 8 fixed score for N10-N20
+
+June 11 fixed $score for different page magnifications
+

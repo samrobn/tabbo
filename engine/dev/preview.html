@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<!--
+  WOFF2 font preview / glyph-coverage dev tool.
+
+  Renders every PK glyph in every lute/blute/tlute WOFF2 family, broken into
+  ASCII and PUA zones. Used to verify glyph coverage, outlines, and winding
+  direction after regenerating WOFF2s (`engine/fonts/build-woff2-fonts.sh`).
+
+  Manual use:
+      cd engine && python3 -m http.server 8000
+      open http://localhost:8000/dev/preview.html
+  Relative paths point at `../fonts/woff2/`, so it must be served from `engine/`.
+
+  Future work: a headless render + golden diff (gated on changes to
+  `engine/fonts/*.mf`, `engine/fonts/assemble-font.py`, or
+  `engine/fonts/pua-mapping.json`) would automate this check. Until that
+  exists, run this manually whenever those sources change.
+
+  Not bundled into the production app (lives outside `electrobun.config.ts`'s
+  `build.copy` map).
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tabbo WOFF2 Font Preview</title>
+<style>
+  @font-face { font-family: 'Tabbo Lute 6pt';           src: url('../fonts/woff2/lute6.woff2')   format('woff2'); }
+  @font-face { font-family: 'Tabbo Lute 7pt';           src: url('../fonts/woff2/lute7.woff2')   format('woff2'); }
+  @font-face { font-family: 'Tabbo Lute 8pt';           src: url('../fonts/woff2/lute8.woff2')   format('woff2'); }
+  @font-face { font-family: 'Tabbo Lute 8.5pt';         src: url('../fonts/woff2/lute85.woff2')  format('woff2'); }
+  @font-face { font-family: 'Tabbo Lute 9pt';           src: url('../fonts/woff2/lute9.woff2')   format('woff2'); }
+  @font-face { font-family: 'Tabbo Baroque Lute 6pt';   src: url('../fonts/woff2/blute6.woff2')  format('woff2'); }
+  @font-face { font-family: 'Tabbo Baroque Lute 7pt';   src: url('../fonts/woff2/blute7.woff2')  format('woff2'); }
+  @font-face { font-family: 'Tabbo Baroque Lute 8pt';   src: url('../fonts/woff2/blute8.woff2')  format('woff2'); }
+  @font-face { font-family: 'Tabbo Baroque Lute 8.5pt'; src: url('../fonts/woff2/blute85.woff2') format('woff2'); }
+  @font-face { font-family: 'Tabbo Baroque Lute 9pt';   src: url('../fonts/woff2/blute9.woff2')  format('woff2'); }
+  @font-face { font-family: 'Tabbo Thin Lute 6pt';      src: url('../fonts/woff2/tlute6.woff2')  format('woff2'); }
+  @font-face { font-family: 'Tabbo Thin Lute 7pt';      src: url('../fonts/woff2/tlute7.woff2')  format('woff2'); }
+  @font-face { font-family: 'Tabbo Thin Lute 8pt';      src: url('../fonts/woff2/tlute8.woff2')  format('woff2'); }
+  @font-face { font-family: 'Tabbo Thin Lute 9pt';      src: url('../fonts/woff2/tlute9.woff2')  format('woff2'); }
+
+  body { font-family: sans-serif; background: #f8f8f8; margin: 0; padding: 16px; }
+  h1 { font-size: 1.2em; margin-bottom: 4px; }
+  p.note { color: #555; font-size: 0.85em; margin: 0 0 16px; }
+
+  .font-section { margin-bottom: 32px; border: 1px solid #ddd; background: #fff; border-radius: 4px; overflow: hidden; }
+  .font-section h2 { font-size: 0.95em; margin: 0; padding: 8px 12px; background: #e8e8e8; border-bottom: 1px solid #ddd; }
+
+  .glyph-row { padding: 12px; display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; line-height: 1; }
+
+  .glyph-cell {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    width: 52px;
+    background: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 2px;
+    padding: 2px;
+  }
+  .glyph-char {
+    font-size: 36px;
+    line-height: 1.2;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .glyph-label {
+    font-family: monospace;
+    font-size: 8px;
+    color: #888;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .zone-header { font-size: 0.8em; color: #666; padding: 4px 12px 0; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Tabbo WOFF2 Font Preview</h1>
+<p class="note">
+  Each cell shows a glyph rendered at 36px with its PK code (decimal) and Unicode codepoint below.
+  ASCII zone glyphs (fret letters, punctuation) use their natural Unicode codepoints.
+  Numeric PK codes are mapped to PUA: U+E000 + pk_code.
+  Winding direction is normalised via FontForge <code>correctDirection()</code> on all glyphs.
+  If a cell is blank, that glyph is not defined in this font variant.
+</p>
+<div id="fonts"></div>
+<script>
+// PK-to-Unicode mapping, derived from pua-mapping.json
+// ASCII zone: pk_code == unicode_codepoint (natural ASCII)
+const ASCII_ZONE = [
+  34, 35, 36, 39, 40, 41, 43, 46, 47, 58, 59, 60, 61, 62, 63, 64,
+  68, 69, 70, 71, 72, 73, 74, 76, 80, 81, 82, 83, 84, 85, 86, 87,
+  89, 90, 91, 93, 94, 95, 97, 98, 99, 100, 101, 102, 103, 104, 105,
+  106, 107, 108, 109, 110, 111, 112, 113, 115, 116, 117, 119, 120,
+  121, 122, 124, 126
+];
+
+// PUA zone: unicode = 0xE000 + pk_code
+const PUA_ZONE = [
+   0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
+  16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+  55, 56, 57, 88, 92, 114,
+  128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140,
+  141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153,
+  154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166,
+  167, 168, 169, 170, 171, 172, 173, 175, 176, 177, 178, 179, 180,
+  181, 182, 183, 184, 185, 186, 187, 188, 191, 194, 195, 196, 197,
+  198, 199, 202, 203, 204, 205, 206, 207, 211, 212, 213, 214, 215,
+  216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228,
+  229, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242,
+  243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255
+];
+const PUA_OFFSET = 0xE000;
+
+const FONTS = [
+  { name: 'lute6',   family: 'Tabbo Lute 6pt' },
+  { name: 'lute7',   family: 'Tabbo Lute 7pt' },
+  { name: 'lute8',   family: 'Tabbo Lute 8pt' },
+  { name: 'lute85',  family: 'Tabbo Lute 8.5pt' },
+  { name: 'lute9',   family: 'Tabbo Lute 9pt' },
+  { name: 'blute6',  family: 'Tabbo Baroque Lute 6pt' },
+  { name: 'blute7',  family: 'Tabbo Baroque Lute 7pt' },
+  { name: 'blute8',  family: 'Tabbo Baroque Lute 8pt' },
+  { name: 'blute85', family: 'Tabbo Baroque Lute 8.5pt' },
+  { name: 'blute9',  family: 'Tabbo Baroque Lute 9pt' },
+  { name: 'tlute6',  family: 'Tabbo Thin Lute 6pt' },
+  { name: 'tlute7',  family: 'Tabbo Thin Lute 7pt' },
+  { name: 'tlute8',  family: 'Tabbo Thin Lute 8pt' },
+  { name: 'tlute9',  family: 'Tabbo Thin Lute 9pt' },
+];
+
+// Spot-check glyphs to note in console: quarter-note flag, F clef, comma, cadenza wave
+// (PK codes from lute.mf: 213=down quarter-note flag, 'z'=122=F clef, 'x'=120=comma/relish-a, 251=end-of-line wave)
+const SPOT_CHECK = {
+  213: 'qtr flag (down)',
+  214: 'qtr flag (up)',
+  122: 'F clef',
+  120: 'comma/relish',
+  251: 'cadenza wave',
+};
+
+function makeGlyphCell(unicode, pkCode, family) {
+  const cell = document.createElement('div');
+  cell.className = 'glyph-cell';
+
+  const ch = document.createElement('span');
+  ch.className = 'glyph-char';
+  ch.style.fontFamily = `'${family}', monospace`;
+  ch.textContent = String.fromCodePoint(unicode);
+
+  const label = document.createElement('span');
+  label.className = 'glyph-label';
+  const hex = unicode.toString(16).toUpperCase().padStart(4, '0');
+  label.textContent = `PK${pkCode} U+${hex}`;
+
+  if (SPOT_CHECK[pkCode]) {
+    cell.title = SPOT_CHECK[pkCode];
+    cell.style.outline = '2px solid #f90';
+  }
+
+  cell.appendChild(ch);
+  cell.appendChild(label);
+  return cell;
+}
+
+const container = document.getElementById('fonts');
+
+for (const font of FONTS) {
+  const section = document.createElement('div');
+  section.className = 'font-section';
+
+  const h2 = document.createElement('h2');
+  h2.textContent = `${font.family} — ${font.name}.woff2`;
+  section.appendChild(h2);
+
+  const zoneA = document.createElement('div');
+  zoneA.className = 'zone-header';
+  zoneA.textContent = 'ASCII zone (fret letters, punctuation — natural Unicode codepoints)';
+  section.appendChild(zoneA);
+
+  const rowA = document.createElement('div');
+  rowA.className = 'glyph-row';
+  for (const pk of ASCII_ZONE) {
+    rowA.appendChild(makeGlyphCell(pk, pk, font.family));
+  }
+  section.appendChild(rowA);
+
+  const zoneP = document.createElement('div');
+  zoneP.className = 'zone-header';
+  zoneP.textContent = 'PUA zone (numeric PK codes — U+E000 + pk_code; orange border = spot-check glyph)';
+  section.appendChild(zoneP);
+
+  const rowP = document.createElement('div');
+  rowP.className = 'glyph-row';
+  for (const pk of PUA_ZONE) {
+    rowP.appendChild(makeGlyphCell(PUA_OFFSET + pk, pk, font.family));
+  }
+  section.appendChild(rowP);
+
+  container.appendChild(section);
+}
+
+// Console spot-check report
+document.fonts.ready.then(() => {
+  console.log('Fonts loaded. Spot-check PK codes (look for inverted fills):');
+  for (const [pk, desc] of Object.entries(SPOT_CHECK)) {
+    const unicode = parseInt(pk) < 128 ? parseInt(pk) : PUA_OFFSET + parseInt(pk);
+    console.log(`  PK ${pk} (${desc}) -> U+${unicode.toString(16).toUpperCase()}`);
+  }
+});
+</script>
+</body>
+</html>

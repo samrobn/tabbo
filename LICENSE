@@ -1,0 +1,56 @@
+# License
+
+Tabbo combines two bodies of code under separate licences.
+
+## Wrapper code — MIT
+
+Everything outside `engine/` (the Electrobun desktop app, build pipeline,
+Vue webview, capture server, evals harness, packaging) is released under
+the MIT licence:
+
+```
+MIT License
+
+Copyright (c) 2026 samrobn
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Engine — Wayne Cripps's terms
+
+The `engine/` directory contains the C++ typesetter and METAFONT fonts
+originally written by Wayne Cripps. It carries its own licence; see
+[`engine/README`](engine/README) for the full text. In summary:
+
+- Copyright 1991 Wayne Cripps. All rights reserved.
+- Free to use, copy, modify, and distribute, provided the notice in
+  `engine/README` appears in all copies and is supplied to anyone who
+  receives a binary copy without sources.
+- **Not** licensed for commercial use without explicit prior written
+  permission from Wayne Cripps.
+- Provided "as is" without warranty.
+
+The "not for commercial use without permission" clause applies to the
+engine portion only. The MIT-licensed wrapper code above does not
+restrict commercial use of the wrapper itself, but binaries that include
+the engine inherit the engine's non-commercial restriction.
+
+## SPDX
+
+`SPDX-License-Identifier: MIT AND LicenseRef-WayneCripps`
