@@ -1,0 +1,67 @@
+# Generated files
+*.ps
+*.log
+*.*gf
+*.pdf
+*.dvi
+
+# C++ object files
+engine/*.o
+
+# Executables
+*.exe
+engine/tab
+
+# IDE
+*.kdev4
+*swp
+*.idea
+.vscode/
+compile_commands.json
+engine/.cache/
+
+# Local tool state
+.claude/scheduled_tasks.lock
+
+# Vim
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+.netrwhist
+*~
+
+# Other
+.nfs*
+*.tab
+
+# evals reference outputs (override blanket *.tab rule above)
+!evals/fixtures/*.tab
+!evals/reference/tab
+!evals/reference/fonts/**
+evals/runs/
+evals/dev/
+
+# Local configuration
+.env
+
+# macOS
+.DS_Store
+
+# Private documentation
+docs-private/
+*.private.md
+*-PRIVATE.md
+
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build output
+dist/
+build/
+artifacts/
+dist-releases/
+
+# TypeScript
+*.tsbuildinfo

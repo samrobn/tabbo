@@ -1,0 +1,32 @@
+{
+  "simple": {
+    "pages": 1,
+    "gsVersion": "10.04.0",
+    "referenceSha": "ea6465df2bee21ff3d52122dbd2bce872c803732",
+    "renderedAt": "2026-04-23T23:50:31.862Z"
+  },
+  "demo": {
+    "pages": 2,
+    "gsVersion": "10.04.0",
+    "referenceSha": "ea6465df2bee21ff3d52122dbd2bce872c803732",
+    "renderedAt": "2026-04-23T23:50:31.862Z"
+  },
+  "sample": {
+    "pages": 2,
+    "gsVersion": "10.04.0",
+    "referenceSha": "ea6465df2bee21ff3d52122dbd2bce872c803732",
+    "renderedAt": "2026-04-23T23:50:31.862Z"
+  },
+  "c": {
+    "pages": 1,
+    "gsVersion": "10.04.0",
+    "referenceSha": "ea6465df2bee21ff3d52122dbd2bce872c803732",
+    "renderedAt": "2026-04-23T23:50:31.862Z"
+  },
+  "t": {
+    "pages": 1,
+    "gsVersion": "10.04.0",
+    "referenceSha": "ea6465df2bee21ff3d52122dbd2bce872c803732",
+    "renderedAt": "2026-04-23T23:50:31.862Z"
+  }
+}
