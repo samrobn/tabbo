@@ -2,14 +2,15 @@
 
 Professional typesetter for lute tablature, supporting renaissance and baroque lutes in French and Italian notation. Works like TeX - processes plain text `.tab` files into beautiful output.
 
-## Alpha (private testers only)
+## Alpha
 
-**Current build**: `0.1.0-alpha.1` (2026-04-29). This is a private alpha — not for public distribution.
+**Current build**: `0.1.0-alpha.3` (2026-05-23). An early alpha — expect rough edges.
 
 ### Install
 
-1. Open the `.dmg` and drag Tabbo to Applications.
-2. First launch: macOS will say *"Tabbo is damaged and can't be opened"*. The app isn't damaged — Gatekeeper is blocking it because this alpha isn't signed yet. Open **Terminal** (Applications → Utilities) and run:
+1. Download `stable-macos-arm64-Tabbo.dmg` from the [latest release](https://github.com/samrobn/tabbo/releases/latest).
+2. Open the `.dmg` and drag Tabbo to Applications.
+3. First launch: macOS will say *"Tabbo is damaged and can't be opened"*. The app isn't damaged — Gatekeeper is blocking it because this alpha isn't signed yet. Open **Terminal** (Applications → Utilities) and run:
 
    ```
    xattr -dr com.apple.quarantine /Applications/Tabbo.app
@@ -18,6 +19,8 @@ Professional typesetter for lute tablature, supporting renaissance and baroque l
    Then double-click Tabbo as normal. Only needed once.
 
    *Alternative GUI route (unreliable on recent macOS, try the Terminal command first):* dismiss the warning, open **System Settings → Privacy & Security**, scroll to the bottom, and click **Open Anyway** next to Tabbo.
+
+Future updates land in-app: the update modal appears when a new release is available, downloads in the background, and restarts to apply.
 
 ### Saving and exporting
 
