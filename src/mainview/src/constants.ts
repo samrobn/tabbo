@@ -14,6 +14,7 @@ export const COMPILE_MESSAGES = {
 export const STORAGE_KEYS = {
 	DRAFT: "tabbo:draft",
 	FILENAME: "tabbo:filename",
+	FILEPATH: "tabbo:filepath",
 	UPDATE_SNOOZED_VERSION: "tabbo:update-snoozed-version",
 } as const;
 

@@ -135,9 +135,10 @@ export interface FileInfo {
 	path: string;
 }
 
-export interface SaveResult {
-	path: string;
-}
+export type SaveResult =
+	| { ok: true; path: string }
+	| { ok: false; reason: "needs-overwrite-confirm"; path: string }
+	| { ok: false; reason: "error"; message: string };
 
 /** Result type for operations that can fail with a user-visible message. */
 export type PdfExportResult =
@@ -150,7 +151,14 @@ export interface Settings {
 	lastOpenedFile: string | null;
 }
 
-export type MenuAction = "open" | "save" | "exportPdf" | "new" | "showHelp";
+export type MenuAction =
+	| "open"
+	| "save"
+	| "exportPdf"
+	| "new"
+	| "showHelp"
+	| "quitRequested"
+	| "closeRequested";
 
 // ---------------------------------------------------------------------------
 // Auto-update types
@@ -209,8 +217,16 @@ export type TabboRPC = {
 				response: FileInfo | null;
 			};
 			saveFile: {
-				params: { content: string; filename: string };
+				params: { content: string; filename: string; currentPath: string | null; confirmOverwrite?: boolean };
 				response: SaveResult;
+			};
+			fileExists: {
+				params: { path: string };
+				response: boolean;
+			};
+			readFile: {
+				params: { path: string };
+				response: { content: string; filename: string } | null;
 			};
 			getSettings: {
 				params: Record<string, never>;
@@ -245,6 +261,11 @@ export type TabboRPC = {
 		};
 		messages: {
 			titleChanged: { title: string };
+			/**
+			 * Webview confirms whether to proceed with a quit or close action.
+			 * Sent in response to a `quitRequested` / `closeRequested` menu action.
+			 */
+			windowActionResponse: { action: "quit" | "close"; proceed: boolean };
 		};
 	}>;
 	webview: RPCSchema<{

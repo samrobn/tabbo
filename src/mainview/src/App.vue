@@ -7,11 +7,13 @@ import HelpPanel from './components/HelpPanel.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import { DEFAULT_TAB_CONTENT, COMPILE_MESSAGES, STORAGE_KEYS, AUTO_SAVE_INTERVAL_MS } from './constants'
 import { examples } from './examples'
-import type { TabboRPC, LayoutResult, Settings, CompilationError, UpdateStatus } from '../../shared/rpc-types'
+import type { TabboRPC, LayoutResult, Settings, CompilationError, UpdateStatus, SaveResult } from '../../shared/rpc-types'
 import { startCaptureWorker } from './composables/useCaptureWorker'
 
 // CSS px per pt at the canonical 96 DPI reference pixel density (1pt = 1/72 in, 1px = 1/96 in)
 const PT_TO_PX = 96 / 72
+
+const basename = (path: string) => path.split("/").pop() ?? path
 
 function capturePreviewPages(): Array<{ svg: string; widthPx: number; heightPx: number }> {
   if (!layoutResult.value) return []
@@ -24,7 +26,7 @@ function capturePreviewPages(): Array<{ svg: string; widthPx: number; heightPx: 
 
   svgEls.forEach(svgEl => {
     // Derive canonical pixel dimensions from the viewBox (which is in points).
-    // viewBox is "0 0 page_width_pt page_height_pt" — vb.width/height are the full page dimensions.
+    // viewBox is "0 0 page_width_pt page_height_pt" - vb.width/height are the full page dimensions.
     const vb = svgEl.viewBox.baseVal
     const widthPx  = Math.round(vb.width  * PT_TO_PX)
     const heightPx = Math.round(vb.height * PT_TO_PX)
@@ -57,6 +59,8 @@ const rpc = Electroview.defineRPC<TabboRPC>({
           case 'exportPdf': exportPdf(); break
           case 'new': clearDraft(); break
           case 'showHelp': showHelpPanel.value = true; break
+          case 'quitRequested': handleWindowAction('quit'); break
+          case 'closeRequested': handleWindowAction('close'); break
         }
       },
       updateStatusChanged: ({ status }) => {
@@ -84,10 +88,17 @@ const fontSize = ref<number>(14)
 const exportStatus = ref<{ success: boolean; message: string } | null>(null)
 const confirmModalOpen = ref<boolean>(false)
 const confirmModalMessage = ref<string>('')
+const confirmPrimaryLabel = ref<string>('Discard changes')
 let confirmResolver: ((value: boolean) => void) | null = null
 const confirmPrimaryBtn = ref<HTMLButtonElement | null>(null)
 
-// Update state — version is tracked across phases because `ready` carries no version field
+// Three-way quit modal - separate from the binary askConfirm so its six existing
+// callers are untouched. Resolves to 'save' | 'discard' | 'cancel'.
+const quitModalOpen = ref<boolean>(false)
+let quitResolver: ((value: 'save' | 'discard' | 'cancel') => void) | null = null
+const quitSaveBtn = ref<HTMLButtonElement | null>(null)
+
+// Update state - version is tracked across phases because `ready` carries no version field
 const updateStatus = ref<UpdateStatus | null>(null)
 const updateTrackedVersion = ref<string | null>(null)
 const updateChangelog = ref<string | null>(null)
@@ -99,6 +110,7 @@ let exportStatusTimer: ReturnType<typeof setTimeout> | null = null
 let stopCaptureWorker: (() => void) | null = null
 let skipNextCompile = false
 let skipNextDirtyMark = false
+let windowActionInFlight = false
 let currentCompileId = 0
 
 const errorLines = computed(() =>
@@ -124,7 +136,7 @@ async function getLayout(): Promise<void> {
       content: tabContent.value,
     })
 
-    // Superseded: a newer request overtook this one — discard silently
+    // Superseded: a newer request overtook this one - discard silently
     if (response.superseded === true) return
 
     if (compileId !== currentCompileId) return
@@ -171,13 +183,14 @@ function debouncedCompile(): void {
   }, compileDebounceMs)
 }
 
-function askConfirm(message: string): Promise<boolean> {
+function askConfirm(message: string, primaryLabel = "Discard changes"): Promise<boolean> {
   if (confirmResolver) {
     confirmResolver(false)
     confirmResolver = null
   }
   return new Promise(resolve => {
     confirmModalMessage.value = message
+    confirmPrimaryLabel.value = primaryLabel
     confirmModalOpen.value = true
     confirmResolver = resolve
     nextTick(() => confirmPrimaryBtn.value?.focus())
@@ -201,11 +214,11 @@ function resolveConfirm(value: boolean): void {
 function handleUpdateStatus(status: UpdateStatus): void {
   if (status.phase === 'available') {
     const snoozed = localStorage.getItem(STORAGE_KEYS.UPDATE_SNOOZED_VERSION)
-    // Only suppress when we have a concrete version to compare — null version
+    // Only suppress when we have a concrete version to compare - null version
     // (Electrobun pushed event before version is known) must not collide with
     // null from getItem on a fresh install.
     if (status.version != null && snoozed === status.version) {
-      // User already dismissed this version — stay idle
+      // User already dismissed this version - stay idle
       return
     }
     updateTrackedVersion.value = status.version
@@ -223,7 +236,7 @@ function handleUpdateStatus(status: UpdateStatus): void {
 }
 
 function snoozeUpdate(): void {
-  // Only persist when we have a real version — writing '' or null would poison
+  // Only persist when we have a real version - writing '' or null would poison
   // the snooze state and trigger the null === null false-positive on next launch.
   if (updateTrackedVersion.value != null) {
     try {
@@ -272,11 +285,14 @@ async function openFile(): Promise<void> {
 
     skipNextCompile = true
     skipNextDirtyMark = true
+    layoutResult.value = null
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
     tabContent.value = result.content
     currentFilename.value = result.filename
     currentFilePath.value = result.path
     isDirty.value = false
     saveToLocalStorage()
+    getLayout()
 
     await electrobun.rpc!.request.updateSettings({
       lastOpenedFile: result.path,
@@ -286,19 +302,61 @@ async function openFile(): Promise<void> {
   }
 }
 
-async function saveFile(): Promise<void> {
+async function saveFile(opts: { skipCopyConfirm?: boolean } = {}): Promise<boolean> {
   try {
+    // A save that creates a NEW file (no tracked path yet, or the filename was
+    // changed away from the open file's name) writes a copy - confirm first so it
+    // is never a surprise. A plain round-trip save (same name, known path) is silent.
+    // skipCopyConfirm suppresses this for the quit path where Save intent is already given.
+    const targetIsNewFile =
+      !currentFilePath.value ||
+      basename(currentFilePath.value) !== currentFilename.value
+    if (targetIsNewFile && !opts.skipCopyConfirm) {
+      const ok = await askConfirm(`Save a copy named "${currentFilename.value}"?`, 'Save copy')
+      if (!ok) return false
+    }
+
     const result = await electrobun.rpc!.request.saveFile({
       content: tabContent.value,
       filename: currentFilename.value,
+      currentPath: currentFilePath.value,
     })
-    currentFilePath.value = result.path
-    isDirty.value = false
-    saveToLocalStorage()
-    showExportStatus(true, `Saved to ${result.path}`)
+    return await applySaveResult(result, false)
   } catch (error) {
     console.error('Failed to save file:', error)
+    showExportStatus(false, 'Save failed')
+    return false
   }
+}
+
+async function applySaveResult(result: SaveResult, didConfirm: boolean): Promise<boolean> {
+  if (result.ok) {
+    currentFilePath.value = result.path
+    currentFilename.value = basename(result.path) // pick up normalisation
+    isDirty.value = false
+    clearDraftStorage()
+    try {
+      await electrobun.rpc!.request.updateSettings({ lastOpenedFile: result.path })
+    } catch {
+      // Best-effort: a settings-write failure must not turn a successful save into
+      // a reported failure or block the quit flow.
+    }
+    showExportStatus(true, `Saved to ${result.path}`)
+    return true
+  }
+  if (result.reason === "needs-overwrite-confirm" && !didConfirm) {
+    const ok = await askConfirm(`${basename(result.path)} already exists. Overwrite?`, "Overwrite")
+    if (!ok) return false
+    const retry = await electrobun.rpc!.request.saveFile({
+      content: tabContent.value,
+      filename: currentFilename.value,
+      currentPath: currentFilePath.value,
+      confirmOverwrite: true,
+    })
+    return await applySaveResult(retry, true)
+  }
+  if (result.reason === "error") showExportStatus(false, result.message)
+  return false
 }
 
 function showExportStatus(success: boolean, message: string): void {
@@ -328,44 +386,118 @@ async function exportPdf(): Promise<void> {
   }
 }
 
-// localStorage as crash-recovery backup
+// Remove all three draft keys - after this the draft slot is empty and a
+// future autosave (which only writes when dirty) will not re-populate it.
+function clearDraftStorage(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.DRAFT)
+    localStorage.removeItem(STORAGE_KEYS.FILENAME)
+    localStorage.removeItem(STORAGE_KEYS.FILEPATH)
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+// localStorage as crash-recovery backup - only written while the buffer is
+// dirty. When clean, the draft is cleared so "a draft exists at launch" means
+// "genuine unsaved work" by construction; a clean exit cannot leave a stray draft.
 function saveToLocalStorage(): void {
+  if (!isDirty.value) {
+    clearDraftStorage()
+    return
+  }
   try {
     localStorage.setItem(STORAGE_KEYS.DRAFT, tabContent.value)
     localStorage.setItem(STORAGE_KEYS.FILENAME, currentFilename.value)
+    localStorage.setItem(STORAGE_KEYS.FILEPATH, currentFilePath.value ?? "")
   } catch {
     // localStorage may be unavailable or full
   }
 }
 
-function loadFromLocalStorage(): boolean {
+function onFilenameInput(value: string) {
+  currentFilename.value = value;
+  isDirty.value = true;        // a rename is an unsaved change (the tabContent watcher won't catch it)
+  saveToLocalStorage();
+}
+
+// Reopen the last file from disk, or leave the default blank document as-is.
+// `settings` is passed in from onMounted - do NOT call getSettings again here.
+async function reopenLast(settings: Settings): Promise<void> {
+  const lastPath = settings.lastOpenedFile
+  if (!lastPath) return
   try {
-    const savedContent = localStorage.getItem(STORAGE_KEYS.DRAFT)
-    const savedFilename = localStorage.getItem(STORAGE_KEYS.FILENAME)
-    if (savedContent) {
-      skipNextCompile = true
-      skipNextDirtyMark = true
-      tabContent.value = savedContent
-      if (savedFilename) {
-        currentFilename.value = savedFilename
-      }
-      return true
-    }
+    const file = await electrobun.rpc!.request.readFile({ path: lastPath })
+    if (!file) return  // missing or unreadable
+    skipNextCompile = true
+    skipNextDirtyMark = true
+    tabContent.value = file.content
+    currentFilename.value = file.filename
+    // Supply the path explicitly - readFile returns content+filename only.
+    // Setting currentFilePath here is what makes the reopened file round-trip
+    // on Save without falling back to a new copy in ~/Documents/Tabbo.
+    currentFilePath.value = lastPath
+    isDirty.value = false
+  } catch {
+    // File unreadable - leave the default blank document
+  }
+}
+
+// On mount: if a draft exists (⇒ genuine unsaved work from an unclean exit), offer
+// to restore it; otherwise reopen the last file from disk (or stay blank).
+// `settings` is passed in from onMounted - do NOT call getSettings again here.
+async function restoreSession(settings: Settings): Promise<void> {
+  let draftContent: string | null = null
+  try {
+    draftContent = localStorage.getItem(STORAGE_KEYS.DRAFT)
   } catch {
     // localStorage may be unavailable
   }
-  return false
+
+  if (draftContent) {
+    const restore = await askConfirm('Restore unsaved changes from your last session?', 'Restore')
+    if (restore) {
+      // Load the draft - mirrors what loadFromLocalStorage did.
+      const savedFilename = localStorage.getItem(STORAGE_KEYS.FILENAME)
+      const savedPath = localStorage.getItem(STORAGE_KEYS.FILEPATH) || ""
+      skipNextCompile = true
+      skipNextDirtyMark = true
+      tabContent.value = draftContent
+      if (savedFilename) {
+        currentFilename.value = savedFilename
+      }
+      if (savedPath) {
+        try {
+          const exists = await electrobun.rpc!.request.fileExists({ path: savedPath })
+          currentFilePath.value = exists ? savedPath : null
+        } catch {
+          currentFilePath.value = null
+        }
+      } else {
+        currentFilePath.value = null
+      }
+      // A restored draft is unsaved work - mark dirty so the quit warning fires
+      // and the autosave keeps the draft alive during the session.
+      isDirty.value = true
+    } else {
+      clearDraftStorage()
+      await reopenLast(settings)
+    }
+  } else {
+    await reopenLast(settings)
+  }
 }
 
 async function clearDraft(): Promise<void> {
   if (isDirty.value && !(await askConfirm('Discard unsaved changes?'))) {
     return
   }
+  clearDraftStorage()
+  // Clear lastOpenedFile so reopen-last never resurrects a file the user left for New.
   try {
-    localStorage.removeItem(STORAGE_KEYS.DRAFT)
-    localStorage.removeItem(STORAGE_KEYS.FILENAME)
+    await electrobun.rpc!.request.updateSettings({ lastOpenedFile: null })
   } catch {
-    // Ignore errors
+    // Settings update is best-effort; don't block the New action
   }
   skipNextDirtyMark = true
   layoutResult.value = null
@@ -373,6 +505,67 @@ async function clearDraft(): Promise<void> {
   currentFilename.value = 'untitled.tab'
   currentFilePath.value = null
   isDirty.value = false
+}
+
+function askQuitChoice(): Promise<'save' | 'discard' | 'cancel'> {
+  if (quitResolver) {
+    quitResolver('cancel')
+    quitResolver = null
+  }
+  return new Promise(resolve => {
+    quitModalOpen.value = true
+    quitResolver = resolve
+    nextTick(() => quitSaveBtn.value?.focus())
+  })
+}
+
+function resolveQuit(choice: 'save' | 'discard' | 'cancel'): void {
+  quitModalOpen.value = false
+  const resolve = quitResolver
+  quitResolver = null
+  resolve?.(choice)
+}
+
+async function handleWindowAction(action: 'quit' | 'close'): Promise<void> {
+  if (windowActionInFlight) return
+  windowActionInFlight = true
+  try {
+    // Belt-and-braces: flush the draft before showing the modal so the latest
+    // on-screen content is preserved even if the user then force-quits the process.
+    if (isDirty.value) saveToLocalStorage()
+
+    if (!isDirty.value) {
+      electrobun.rpc!.send.windowActionResponse({ action, proceed: true })
+      return
+    }
+
+    const choice = await askQuitChoice()
+
+    if (choice === 'cancel') {
+      electrobun.rpc!.send.windowActionResponse({ action, proceed: false })
+      return
+    }
+
+    if (choice === 'save') {
+      // skipCopyConfirm: Save intent already given in the quit modal; still
+      // honours overwrite-confirm inside applySaveResult when a name collision occurs.
+      const saved = await saveFile({ skipCopyConfirm: true })
+      if (!saved) {
+        // Cancelled at the overwrite prompt or the write errored - stay open.
+        electrobun.rpc!.send.windowActionResponse({ action, proceed: false })
+        return
+      }
+      // applySaveResult already set isDirty=false and cleared the draft.
+    } else {
+      // discard - clear dirty and draft so the teardown autosave writes nothing.
+      isDirty.value = false
+      clearDraftStorage()
+    }
+
+    electrobun.rpc!.send.windowActionResponse({ action, proceed: true })
+  } finally {
+    windowActionInFlight = false
+  }
 }
 
 async function loadExample(exampleName: string): Promise<void> {
@@ -416,24 +609,33 @@ watch(tabContent, () => {
 onMounted(async () => {
   window.addEventListener('keydown', handleKeyboardShortcut)
 
-  // Load persisted settings
+  // Load persisted settings - captured here and threaded into restoreSession
+  // so getSettings is only called once.
+  let settings: Settings = { fontSize: 14, theme: 'light' as const, lastOpenedFile: null }
   try {
-    const settings: Settings = await electrobun.rpc!.request.getSettings({})
+    settings = await electrobun.rpc!.request.getSettings({})
     fontSize.value = settings.fontSize
   } catch {
-    // Settings unavailable (e.g. HMR mode) — use defaults
+    // Settings unavailable (e.g. HMR mode) - use defaults
   }
 
-  const hasSavedDraft = loadFromLocalStorage()
+  try {
+    await restoreSession(settings)
+  } catch (error) {
+    console.error('Session restore failed:', error)
+  }
   autoSaveTimer = setInterval(saveToLocalStorage, AUTO_SAVE_INTERVAL_MS)
   window.addEventListener('blur', saveToLocalStorage)
 
-  setTimeout(() => getLayout(), hasSavedDraft ? 100 : 500)
+  // Single initial compile for whatever was loaded by restoreSession.
+  // The skipNextCompile guard on the content watcher prevents the watcher from
+  // double-compiling, so this setTimeout is the only compile that fires on launch.
+  setTimeout(() => getLayout(), 100)
 
   // Check for updates after a short delay so the initial layout RPC has settled.
   // Fires silently on dev channel (bun side returns available: false immediately).
   // webview→bun requests don't have the focus gate that affects bun→webview pushes,
-  // so 500ms is sufficient — matching the getLayout delay above.
+  // so 500ms is sufficient - matching the getLayout delay above.
   setTimeout(async () => {
     try {
       const info = await electrobun.rpc!.request.checkForUpdate({})
@@ -463,7 +665,9 @@ onUnmounted(() => {
   if (autoSaveTimer) clearInterval(autoSaveTimer)
   if (exportStatusTimer) clearTimeout(exportStatusTimer)
   if (confirmResolver) { confirmResolver(false); confirmResolver = null }
+  if (quitResolver) { quitResolver('cancel'); quitResolver = null }
   stopCaptureWorker?.()
+  // Only writes if isDirty - a clean exit does not leave a stray draft.
   saveToLocalStorage()
 })
 </script>
@@ -474,7 +678,14 @@ onUnmounted(() => {
       <div class="px-4 py-2 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <h1 class="text-xl font-semibold text-gray-800">Tabbo</h1>
-          <span class="text-sm text-gray-500">{{ currentFilename }}</span>
+          <input
+            class="filename-field"
+            :value="currentFilename"
+            @input="onFilenameInput(($event.target as HTMLInputElement).value)"
+            @keydown.enter="($event.target as HTMLInputElement).blur()"
+            spellcheck="false"
+            aria-label="Document name"
+          />
           <span v-if="isDirty" class="text-xs text-amber-600 font-medium">Edited</span>
         </div>
 
@@ -505,14 +716,6 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
-
-          <button
-            @click="clearDraft"
-            class="px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-            title="Clear and start fresh"
-          >
-            New
-          </button>
 
           <button
             @click="showHelpPanel = true"
@@ -621,7 +824,43 @@ onUnmounted(() => {
             @click="resolveConfirm(true)"
             class="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
           >
-            Discard changes
+            {{ confirmPrimaryLabel }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Three-way quit modal: Save / Discard / Cancel -->
+    <div
+      v-if="quitModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      @keydown.esc="resolveQuit('cancel')"
+    >
+      <div class="absolute inset-0 bg-black/40" @click="resolveQuit('cancel')" />
+      <div
+        class="relative bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4"
+        @click.stop
+      >
+        <p class="text-sm text-gray-700 mb-5">You have unsaved changes. Save before closing?</p>
+        <div class="flex justify-end gap-3">
+          <button
+            @click="resolveQuit('cancel')"
+            class="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="resolveQuit('discard')"
+            class="px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+          >
+            Discard
+          </button>
+          <button
+            ref="quitSaveBtn"
+            @click="resolveQuit('save')"
+            class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+          >
+            Save
           </button>
         </div>
       </div>
@@ -639,5 +878,21 @@ body {
   max-width: none;
   margin: 0;
   padding: 0;
+}
+
+.filename-field {
+  font-size: 0.875rem; /* text-sm */
+  color: #6b7280;      /* text-gray-500 */
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0 2px; /* constant padding prevents layout shift when focus ring appears */
+  min-width: 8ch;
+  width: auto;
+}
+
+.filename-field:focus {
+  outline: 1px solid #d1d5db; /* gray-300 - subtle focus ring */
+  border-radius: 2px;
 }
 </style>
