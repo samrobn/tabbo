@@ -1,5 +1,6 @@
 import { join, basename } from "path";
-import { mkdirSync } from "fs";
+import { mkdirSync, existsSync } from "fs";
+import { deriveTabFilename, resolveSaveTarget } from "./filename-utils";
 import { tmpdir } from "os";
 import { Utils } from "electrobun/bun";
 import type { FileInfo, SaveResult, PdfExportResult } from "../shared/rpc-types";
@@ -40,10 +41,36 @@ export async function openTabFile(): Promise<FileInfo | null> {
 export async function saveTabFile(
 	content: string,
 	filename: string,
+	currentPath: string | null,
+	confirmOverwrite: boolean,
 ): Promise<SaveResult> {
-	const filePath = join(getProjectDir(), filename);
-	await Bun.write(filePath, content);
-	return { path: filePath };
+	const name = deriveTabFilename(filename);
+	if (!name) return { ok: false, reason: "error", message: `Invalid filename: "${filename}"` };
+	const target = resolveSaveTarget(name, currentPath, getProjectDir());
+	if (target.isNew && !confirmOverwrite && existsSync(target.path)) {
+		return { ok: false, reason: "needs-overwrite-confirm", path: target.path };
+	}
+	try {
+		await Bun.write(target.path, content);
+		return { ok: true, path: target.path };
+	} catch (err) {
+		return { ok: false, reason: "error", message: String(err) };
+	}
+}
+
+export function fileExists(path: string): boolean {
+	return existsSync(path);
+}
+
+export async function readTabFile(
+	path: string,
+): Promise<{ content: string; filename: string } | null> {
+	try {
+		const content = await Bun.file(path).text();
+		return { content, filename: basename(path) };
+	} catch {
+		return null;
+	}
 }
 
 /**

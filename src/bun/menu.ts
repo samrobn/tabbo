@@ -13,12 +13,13 @@ const menuTemplate: ApplicationMenuItemConfig[] = [
 			{ role: "hideOthers" },
 			{ role: "showAll" },
 			{ type: "separator" },
-			{ role: "quit" },
+			{ label: "Quit Tabbo", action: "app:quit", accelerator: "Cmd+Q" },
 		],
 	},
 	{
 		label: "File",
 		submenu: [
+			{ label: "New", action: "file:new", accelerator: "Cmd+N" },
 			{ label: "Open...", action: "file:open", accelerator: "Cmd+O" },
 			{ type: "separator" },
 			{ label: "Save", action: "file:save", accelerator: "Cmd+S" },
@@ -28,7 +29,7 @@ const menuTemplate: ApplicationMenuItemConfig[] = [
 				accelerator: "Cmd+Shift+E",
 			},
 			{ type: "separator" },
-			{ role: "close" },
+			{ label: "Close Window", action: "window:close", accelerator: "Cmd+W" },
 		],
 	},
 	{

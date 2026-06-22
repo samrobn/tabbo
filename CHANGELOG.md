@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-06-22
+
+### Changed
+
+- Save now writes back to the file you opened, instead of silently creating a separate copy in your Documents folder.
+- Opening a file refreshes the live preview immediately, rather than waiting for the next edit.
+
+### Added
+
+- Rename a document inline in the title; saving under the new name writes a copy and leaves the original untouched.
+- Save confirms before creating a copy or overwriting an existing file, and shows an error if a save fails.
+- Start a new document from File → New (Cmd+N).
+- Quitting with unsaved changes prompts you to Save, Discard, or Cancel.
+- Tabbo reopens your last file on launch, and offers to recover unsaved work after an unexpected quit or crash.
+
 ## [0.1.0-alpha.3] - 2026-05-23
 
 ### Changed
@@ -35,7 +50,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Preview stability: stopped flicker between successive recompiles.
 - Bundled lute tablature fonts (renaissance, baroque, thin variants) and Ghostscript for self-contained offline use.
 
-[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.3...HEAD
+[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.4...HEAD
+[0.1.0-alpha.4]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/samrobn/tabbo/releases/tag/v0.1.0-alpha.1

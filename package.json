@@ -1,6 +1,6 @@
 {
 	"name": "tabbo",
-	"version": "0.1.0-alpha.3",
+	"version": "0.1.0-alpha.4",
 	"private": true,
 	"type": "module",
 	"description": "Lute tablature typesetter - Electrobun desktop app wrapping C++ engine",

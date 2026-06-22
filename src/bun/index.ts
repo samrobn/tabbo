@@ -1,6 +1,6 @@
-import { BrowserView, BrowserWindow, Updater } from "electrobun/bun";
+import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { getEngineWorker } from "./engine-worker";
-import { openTabFile, saveTabFile, exportPdfFromContent, getCapturesDir } from "./file-manager";
+import { openTabFile, saveTabFile, fileExists, readTabFile, exportPdfFromContent, getCapturesDir } from "./file-manager";
 import { loadSettings, updateSettings } from "./settings";
 import { setupMenu } from "./menu";
 import type { TabboRPC, MenuAction } from "../shared/rpc-types";
@@ -41,8 +41,10 @@ const rpc = BrowserView.defineRPC<TabboRPC>({
 			compileToPdf: async ({ content, filename }) =>
 				exportPdfFromContent(content, filename),
 			openFile: async () => openTabFile(),
-			saveFile: async ({ content, filename }) =>
-				saveTabFile(content, filename),
+			saveFile: ({ content, filename, currentPath, confirmOverwrite }) =>
+				saveTabFile(content, filename, currentPath, confirmOverwrite ?? false),
+			fileExists: ({ path }) => fileExists(path),
+			readFile: ({ path }) => readTabFile(path),
 			getSettings: async () => loadSettings(),
 			updateSettings: async (partial) => updateSettings(partial),
 			checkForUpdate: async () => checkForUpdate(),
@@ -62,6 +64,12 @@ const rpc = BrowserView.defineRPC<TabboRPC>({
 		messages: {
 			titleChanged: ({ title }) => {
 				mainWindow.setTitle(title);
+			},
+			windowActionResponse: ({ action, proceed }) => {
+				// mainWindow exists by the time any windowActionResponse arrives: the RPC
+				// connects only after the webview loads, which requires the window. The guard
+				// in performWindowAction is belt-and-braces.
+				if (proceed) performWindowAction(action);
 			},
 		},
 	},
@@ -89,8 +97,33 @@ subscribeToUpdateStatus((status) => {
 	rpc.send.updateStatusChanged({ status });
 });
 
+// Whether the webview has received at least one focus event.
+// Before first focus, RPC send is unreliable (Electrobun named-pipe gate),
+// so quit/close are dispatched directly without asking the webview.
+let hasFocused = false;
+mainWindow.on("focus", () => {
+	hasFocused = true;
+});
+
+// Perform the actual OS-level quit or window close.
+// Utils.quit() runs Electrobun's full shutdown sequence (before-quit event,
+// native stop, force-exit). mainWindow.close() sends a closeWindow FFI call
+// which triggers exitOnLastWindowClosed → quit() in BrowserWindow's close handler.
+function performWindowAction(kind: "quit" | "close"): void {
+	if (kind === "quit") {
+		Utils.quit();
+	} else {
+		if (mainWindow) {
+			mainWindow.close();
+		} else {
+			console.error("[tabbo] mainWindow is not defined; cannot close window");
+		}
+	}
+}
+
 // Map menu actions to webview messages
 const menuActionMap: Record<string, MenuAction> = {
+	"file:new": "new",
 	"file:open": "open",
 	"file:save": "save",
 	"file:exportPdf": "exportPdf",
@@ -98,6 +131,19 @@ const menuActionMap: Record<string, MenuAction> = {
 };
 
 setupMenu((action) => {
+	// Intercept quit and close before the generic map forward.
+	// If the webview hasn't focused yet, dispatch directly (nothing to lose).
+	// Once focused, ask the webview so it can confirm any unsaved-changes guard.
+	if (action === "app:quit" || action === "window:close") {
+		const kind = action === "app:quit" ? "quit" : "close";
+		if (!hasFocused) {
+			performWindowAction(kind);
+			return;
+		}
+		rpc.send.menuAction({ action: kind === "quit" ? "quitRequested" : "closeRequested" });
+		return;
+	}
+
 	const menuAction = menuActionMap[action];
 	if (menuAction) {
 		rpc.send.menuAction({ action: menuAction });
