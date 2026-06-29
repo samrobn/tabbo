@@ -43,10 +43,11 @@ export async function saveTabFile(
 	filename: string,
 	currentPath: string | null,
 	confirmOverwrite: boolean,
+	targetDir: string | null = null,
 ): Promise<SaveResult> {
 	const name = deriveTabFilename(filename);
 	if (!name) return { ok: false, reason: "error", message: `Invalid filename: "${filename}"` };
-	const target = resolveSaveTarget(name, currentPath, getProjectDir());
+	const target = resolveSaveTarget(name, currentPath, getProjectDir(), targetDir);
 	if (target.isNew && !confirmOverwrite && existsSync(target.path)) {
 		return { ok: false, reason: "needs-overwrite-confirm", path: target.path };
 	}
@@ -60,6 +61,32 @@ export async function saveTabFile(
 
 export function fileExists(path: string): boolean {
 	return existsSync(path);
+}
+
+/**
+ * Resolve where a save would write, without writing - drives the "Save a copy"
+ * confirm so the user sees the real destination. Mirrors saveTabFile's
+ * resolution exactly (same deriveTabFilename + resolveSaveTarget), so the path
+ * shown is the path used. Returns null when the filename is invalid.
+ */
+export function previewSaveTarget(
+	filename: string,
+	currentPath: string | null,
+	targetDir: string | null = null,
+): string | null {
+	const name = deriveTabFilename(filename);
+	if (!name) return null;
+	return resolveSaveTarget(name, currentPath, getProjectDir(), targetDir).path;
+}
+
+export async function chooseFolder(): Promise<string | null> {
+	const paths = await Utils.openFileDialog({
+		startingFolder: getProjectDir(),
+		canChooseFiles: false,
+		canChooseDirectory: true,
+		allowsMultipleSelection: false,
+	});
+	return paths && paths.length > 0 ? paths[0] : null;
 }
 
 export async function readTabFile(

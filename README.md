@@ -4,7 +4,7 @@ Professional typesetter for lute tablature, supporting renaissance and baroque l
 
 ## Alpha
 
-**Current build**: `0.1.0-alpha.3` (2026-05-23). An early alpha — expect rough edges.
+An early alpha — expect rough edges. The [latest release](https://github.com/samrobn/tabbo/releases/latest) is always the current build.
 
 ### Install
 
@@ -24,15 +24,16 @@ Future updates land in-app: the update modal appears when a new release is avail
 
 ### Saving and exporting
 
-- Tabbo saves and exports to `~/Documents/Tabbo/`. It does **not** save back to the file you opened — it always writes to that folder.
-- Re-exporting a PDF with the same name overwrites the previous one.
-- `Cmd+S` shows a green "Saved to ..." toast at the top of the preview pane. Export errors show the same toast in red.
+- Click the filename (the chevron button at the top-left of the editor) to open the document menu: rename the file and choose which folder it saves to. Both apply on the next save.
+- `Cmd+S` saves - silently on success (the **Edited** badge clears). A file you opened is saved back in place; a new document defaults to `~/Documents/Tabbo/`. Saving into a folder that already holds a file of that name asks before replacing it.
+- `Cmd+Shift+E` exports a PDF to the same folder and shows a "Saved to ..." toast; re-exporting with the same name overwrites it.
+- Save and export errors show a red toast at the top of the preview pane.
 
 ### Unsaved changes
 
-- An amber **Edited** badge appears next to the filename when there are unsaved changes.
-- Opening another file or starting a new one prompts before discarding edits.
-- `Cmd+Q` does **not** prompt — but the buffer is autosaved every 30 seconds and on focus loss, so quitting and relaunching restores your work. Use `Cmd+S` before quitting to keep the `.tab` file on disk.
+- A muted **Edited** badge appears next to the filename when there are unsaved changes, and fades out when you save.
+- Opening another file, starting a new one, or loading a template prompts before discarding edits.
+- `Cmd+Q` and closing the window prompt to Save, Discard, or Cancel when there are unsaved changes. The buffer is also autosaved every 30 seconds and on focus loss, so a force-quit still restores your work on relaunch.
 
 ### Multi-page scores
 

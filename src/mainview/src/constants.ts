@@ -15,6 +15,8 @@ export const STORAGE_KEYS = {
 	DRAFT: "tabbo:draft",
 	FILENAME: "tabbo:filename",
 	FILEPATH: "tabbo:filepath",
+	TARGETDIR: "tabbo:targetdir",
+	SPLIT: "tabbo:split",
 	UPDATE_SNOOZED_VERSION: "tabbo:update-snoozed-version",
 } as const;
 

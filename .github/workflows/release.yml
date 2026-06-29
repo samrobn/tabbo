@@ -42,7 +42,13 @@ jobs:
       - name: List artefacts
         run: ls -la artifacts/
 
+      # Publish a GitHub Release only on the public release repo - it is the
+      # auto-update source. Elsewhere (e.g. the private source-of-truth repo)
+      # every step above still runs as a pre-release build smoke test, but a
+      # Release published here would be a separate, unused binary that no
+      # client reads, so skip the publish.
       - name: Create GitHub Release
+        if: github.repository == 'samrobn/tabbo'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           files: |

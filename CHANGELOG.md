@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026-06-29
+
+### Added
+
+- Drag the divider between the editor and preview to resize the panes; double-click to snap back to 50/50. The split is remembered across launches.
+- File → New from Template… starts a new document from any of the bundled examples.
+- File → Discard Changes reverts the document to its last saved state.
+
+### Changed
+
+- Rename a document and choose where it saves from an in-app menu on the editor bar — click the filename to edit the name or pick a folder. Changes apply on your next save.
+- Tidied the window: filename and zoom moved into the editor and preview bars, and the "Tab Source" / "Preview" titles and the Help button are gone (the Help menu stays).
+- Saving into a folder that already holds a file of that name now asks once before replacing it, instead of a two-step prompt that could overwrite silently.
+- Successful saves no longer pop a notification — the Edited badge clearing is the cue; failures still notify.
+
+### Fixed
+
+- Removed a stray duplicate text cursor in the editor and made the cursor easier to see.
+
 ## [0.1.0-alpha.4] - 2026-06-22
 
 ### Changed
@@ -50,7 +69,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Preview stability: stopped flicker between successive recompiles.
 - Bundled lute tablature fonts (renaissance, baroque, thin variants) and Ghostscript for self-contained offline use.
 
-[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.4...HEAD
+[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.5...HEAD
+[0.1.0-alpha.5]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.1...v0.1.0-alpha.2

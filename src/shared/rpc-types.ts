@@ -149,13 +149,16 @@ export interface Settings {
 	fontSize: number;
 	theme: "light" | "dark";
 	lastOpenedFile: string | null;
+	recentSaveDirs: string[];
 }
 
 export type MenuAction =
 	| "open"
 	| "save"
+	| "revert"
 	| "exportPdf"
 	| "new"
+	| "newFromTemplate"
 	| "showHelp"
 	| "quitRequested"
 	| "closeRequested";
@@ -217,12 +220,22 @@ export type TabboRPC = {
 				response: FileInfo | null;
 			};
 			saveFile: {
-				params: { content: string; filename: string; currentPath: string | null; confirmOverwrite?: boolean };
+				params: { content: string; filename: string; currentPath: string | null; confirmOverwrite?: boolean; targetDir?: string | null };
 				response: SaveResult;
 			};
 			fileExists: {
 				params: { path: string };
 				response: boolean;
+			};
+			/** Resolve where a save would write (without writing), to show in the copy-confirm. Null if the filename is invalid. */
+			previewSaveTarget: {
+				params: { filename: string; currentPath: string | null; targetDir?: string | null };
+				response: string | null;
+			};
+			/** Open a native folder picker. Returns the chosen absolute path, or null if cancelled. */
+			chooseFolder: {
+				params: Record<string, never>;
+				response: string | null;
 			};
 			readFile: {
 				params: { path: string };
@@ -260,7 +273,6 @@ export type TabboRPC = {
 			};
 		};
 		messages: {
-			titleChanged: { title: string };
 			/**
 			 * Webview confirms whether to proceed with a quit or close action.
 			 * Sent in response to a `quitRequested` / `closeRequested` menu action.
