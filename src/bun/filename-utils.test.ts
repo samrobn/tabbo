@@ -56,4 +56,22 @@ describe("resolveSaveTarget", () => {
       isNew: true,
     });
   });
+  test("targetDir override → joins name onto targetDir, isNew when path differs", () => {
+    expect(resolveSaveTarget("galliard.tab", "/Users/test/scores/galliard.tab", PROJECT, "/Users/test/Desktop")).toEqual({
+      path: "/Users/test/Desktop/galliard.tab",
+      isNew: true,
+    });
+  });
+  test("targetDir equal to current dir → round-trip, not new", () => {
+    expect(resolveSaveTarget("galliard.tab", "/Users/test/scores/galliard.tab", PROJECT, "/Users/test/scores")).toEqual({
+      path: "/Users/test/scores/galliard.tab",
+      isNew: false,
+    });
+  });
+  test("null targetDir → unchanged default behaviour", () => {
+    expect(resolveSaveTarget("galliard.tab", null, PROJECT, null)).toEqual({
+      path: "/Users/test/Documents/Tabbo/galliard.tab",
+      isNew: true,
+    });
+  });
 });

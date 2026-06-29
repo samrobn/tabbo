@@ -30,13 +30,19 @@ function updateContainerWidth() {
   }
 }
 
+// Observe the container itself, not just window resize - the split divider changes
+// the pane width without a window resize, and ResizeObserver catches both.
+let resizeObserver: ResizeObserver | null = null
 onMounted(() => {
   updateContainerWidth()
-  window.addEventListener('resize', updateContainerWidth)
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(updateContainerWidth)
+    resizeObserver.observe(containerRef.value)
+  }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', updateContainerWidth)
+  resizeObserver?.disconnect()
 })
 
 function zoomIn() {
@@ -54,10 +60,8 @@ function resetZoom() {
 
 <template>
   <div class="h-full flex flex-col">
-    <!-- Header bar with zoom controls -->
-    <div class="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
-      <h2 class="text-sm font-medium text-gray-700">Preview</h2>
-
+    <!-- Header bar with zoom controls (title removed; matches the editor bar height for column alignment) -->
+    <div class="px-3 h-11 bg-gray-50 border-b border-gray-200 flex items-center justify-end gap-2">
       <!-- Zoom controls (only shown when a layout is available) -->
       <div v-if="layout" class="flex items-center gap-1">
         <button

@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS: Settings = {
 	fontSize: 14,
 	theme: "light",
 	lastOpenedFile: null,
+	recentSaveDirs: [],
 };
 
 function getSettingsPath(): string {

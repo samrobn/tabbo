@@ -1,6 +1,6 @@
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { getEngineWorker } from "./engine-worker";
-import { openTabFile, saveTabFile, fileExists, readTabFile, exportPdfFromContent, getCapturesDir } from "./file-manager";
+import { openTabFile, saveTabFile, fileExists, readTabFile, previewSaveTarget, chooseFolder, exportPdfFromContent, getCapturesDir } from "./file-manager";
 import { loadSettings, updateSettings } from "./settings";
 import { setupMenu } from "./menu";
 import type { TabboRPC, MenuAction } from "../shared/rpc-types";
@@ -41,9 +41,11 @@ const rpc = BrowserView.defineRPC<TabboRPC>({
 			compileToPdf: async ({ content, filename }) =>
 				exportPdfFromContent(content, filename),
 			openFile: async () => openTabFile(),
-			saveFile: ({ content, filename, currentPath, confirmOverwrite }) =>
-				saveTabFile(content, filename, currentPath, confirmOverwrite ?? false),
+			saveFile: ({ content, filename, currentPath, confirmOverwrite, targetDir }) =>
+				saveTabFile(content, filename, currentPath, confirmOverwrite ?? false, targetDir ?? null),
 			fileExists: ({ path }) => fileExists(path),
+			previewSaveTarget: ({ filename, currentPath, targetDir }) => previewSaveTarget(filename, currentPath, targetDir ?? null),
+			chooseFolder: () => chooseFolder(),
 			readFile: ({ path }) => readTabFile(path),
 			getSettings: async () => loadSettings(),
 			updateSettings: async (partial) => updateSettings(partial),
@@ -62,9 +64,6 @@ const rpc = BrowserView.defineRPC<TabboRPC>({
 			},
 		},
 		messages: {
-			titleChanged: ({ title }) => {
-				mainWindow.setTitle(title);
-			},
 			windowActionResponse: ({ action, proceed }) => {
 				// mainWindow exists by the time any windowActionResponse arrives: the RPC
 				// connects only after the webview loads, which requires the window. The guard
@@ -124,8 +123,10 @@ function performWindowAction(kind: "quit" | "close"): void {
 // Map menu actions to webview messages
 const menuActionMap: Record<string, MenuAction> = {
 	"file:new": "new",
+	"file:newFromTemplate": "newFromTemplate",
 	"file:open": "open",
 	"file:save": "save",
+	"file:revert": "revert",
 	"file:exportPdf": "exportPdf",
 	"help:syntax": "showHelp",
 };

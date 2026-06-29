@@ -20,9 +20,11 @@ const menuTemplate: ApplicationMenuItemConfig[] = [
 		label: "File",
 		submenu: [
 			{ label: "New", action: "file:new", accelerator: "Cmd+N" },
+			{ label: "New from Template...", action: "file:newFromTemplate" },
 			{ label: "Open...", action: "file:open", accelerator: "Cmd+O" },
 			{ type: "separator" },
 			{ label: "Save", action: "file:save", accelerator: "Cmd+S" },
+			{ label: "Discard Changes", action: "file:revert" },
 			{
 				label: "Export PDF",
 				action: "file:exportPdf",

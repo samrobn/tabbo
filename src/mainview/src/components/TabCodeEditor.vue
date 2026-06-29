@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, shallowRef, toRef } from 'vue'
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, Decoration, type DecorationSet } from '@codemirror/view'
+import { ref, watch, onMounted, onUnmounted, shallowRef } from 'vue'
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, Decoration, type DecorationSet } from '@codemirror/view'
 import { EditorState, Compartment, StateField, StateEffect } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
@@ -76,6 +76,9 @@ onMounted(() => {
       lineNumbers(),
       highlightActiveLine(),
       highlightActiveLineGutter(),
+      // CM draws + manages its own cursor and hides the native caret (caret-color: transparent).
+      // Without this, the native WebKit caret leaves repaint ghosts on type-then-delete in WKWebView.
+      drawSelection(),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       languageConf.of(tab()),
@@ -108,6 +111,9 @@ onMounted(() => {
         },
         '.cm-activeLine': {
           backgroundColor: '#f3f4f6',
+        },
+        '.cm-cursor, .cm-dropCursor': {
+          borderLeftWidth: '2px',
         },
         '&.cm-focused .cm-cursor': {
           borderLeftColor: '#3b82f6',
@@ -166,8 +172,8 @@ onUnmounted(() => {
 
 <template>
   <div class="h-full flex flex-col">
-    <div class="px-4 py-2 bg-gray-50 border-b border-gray-200">
-      <h2 class="text-sm font-medium text-gray-700">Tab Source</h2>
+    <div class="px-3 h-11 flex items-center bg-gray-50 border-b border-gray-200">
+      <slot name="header" />
     </div>
     <div ref="editorContainer" class="flex-1 overflow-hidden"></div>
   </div>

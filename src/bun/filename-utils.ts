@@ -54,7 +54,12 @@ export function resolveSaveTarget(
 	name: string,
 	currentPath: string | null,
 	projectDir: string,
+	targetDir?: string | null,
 ): SaveTarget {
+	if (targetDir) {
+		const path = join(targetDir, name);
+		return { path, isNew: path !== currentPath };
+	}
 	if (currentPath === null) return { path: join(projectDir, name), isNew: true };
 	if (basename(currentPath) === name) return { path: currentPath, isNew: false };
 	return { path: join(dirname(currentPath), name), isNew: true };
