@@ -64,6 +64,7 @@ const rpc = Electroview.defineRPC<TabboRPC>({
           case 'exportPdf': exportPdf(); break
           case 'new': clearDraft(); break
           case 'newFromTemplate': showTemplatePicker.value = true; nextTick(() => templatePickerRoot.value?.focus()); break
+          case 'find': editorRef.value?.toggleSearch(); break
           case 'showHelp': showHelpPanel.value = true; break
           case 'quitRequested': handleWindowAction('quit'); break
           case 'closeRequested': handleWindowAction('close'); break
@@ -77,6 +78,8 @@ const rpc = Electroview.defineRPC<TabboRPC>({
 })
 
 const electrobun = new Electrobun.Electroview({ rpc })
+
+const editorRef = ref<{ toggleSearch: () => void } | null>(null)
 
 const tabContent = ref<string>(DEFAULT_TAB_CONTENT)
 const layoutResult = ref<LayoutResult | null>(null)
@@ -895,7 +898,7 @@ onUnmounted(() => {
         :style="{ '--editor-width': editorWidthPct + '%' }"
         :class="activeTab === 'editor' ? 'block' : 'hidden md:block'"
       >
-        <TabCodeEditor v-model="tabContent" :error-lines="errorLines" :font-size="fontSize">
+        <TabCodeEditor ref="editorRef" v-model="tabContent" :error-lines="errorLines" :font-size="fontSize">
           <template #header>
             <div class="relative">
               <button

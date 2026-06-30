@@ -160,6 +160,7 @@ export type MenuAction =
 	| "new"
 	| "newFromTemplate"
 	| "showHelp"
+	| "find"
 	| "quitRequested"
 	| "closeRequested";
 

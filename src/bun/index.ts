@@ -129,6 +129,7 @@ const menuActionMap: Record<string, MenuAction> = {
 	"file:revert": "revert",
 	"file:exportPdf": "exportPdf",
 	"help:syntax": "showHelp",
+	"edit:find": "find",
 };
 
 setupMenu((action) => {
