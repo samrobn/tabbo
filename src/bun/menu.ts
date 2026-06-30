@@ -44,6 +44,8 @@ const menuTemplate: ApplicationMenuItemConfig[] = [
 			{ role: "copy" },
 			{ role: "paste" },
 			{ role: "selectAll" },
+			{ type: "separator" },
+			{ label: "Find", action: "edit:find", accelerator: "Cmd+F" },
 		],
 	},
 	{

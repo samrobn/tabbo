@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-06-30
+
+### Added
+
+- Find in the editor: press Cmd+F (or Edit → Find) to search the tab source. A floating bar shows the match count, steps through matches with the arrows or Enter, and highlights every occurrence.
+
+### Fixed
+
+- Selecting text by dragging now highlights reliably, including within a single line, and the text cursor hides while a selection is active.
+
 ## [0.1.0-alpha.5] - 2026-06-29
 
 ### Added
@@ -69,7 +79,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Preview stability: stopped flicker between successive recompiles.
 - Bundled lute tablature fonts (renaissance, baroque, thin variants) and Ghostscript for self-contained offline use.
 
-[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.5...HEAD
+[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.6...HEAD
+[0.1.0-alpha.6]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
