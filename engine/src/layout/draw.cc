@@ -29,6 +29,7 @@
 #define WEIGHTS 15		/* number of different wieghts */
 
 void p_err(int sys, int line, char *arg);
+int get_system_source_line(int index);	/* get_t.cc -- pass1-recorded source lines */
 
 void
 printsystem(print *p, i_buf *i_b, font_list *f_a[], int *l_p, struct file_info *f)
@@ -40,6 +41,7 @@ printsystem(print *p, i_buf *i_b, font_list *f_a[], int *l_p, struct file_info *
        13=fingering */
 
     n_system++;
+    p->begin_system(get_system_source_line(n_system - 1));
 
     /*   total = */ extra = 0.0;
 

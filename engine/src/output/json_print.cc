@@ -294,13 +294,34 @@ int json_print::do_page(i_buf *i_b, font_list *f_l[])
  *
  * System detection via push/pop depth is unreliable because pass2, score.cc,
  * and dvi_f.cc all push/pop at different nesting levels for different purposes
- * (staff lines, individual notes, chord groups). Proper system splitting
- * requires a dedicated hook called from printsystem() in draw.cc, which is
- * a separate task.
+ * (staff lines, individual notes, chord groups). printsystem() in draw.cc now
+ * calls begin_system() once per system (see below), but that hook only feeds
+ * the additive top-level "anchors" array -- it does not gate primitive
+ * placement, so primitives still all land in system 0. Actually splitting
+ * primitives per system remains a separate task.
  */
 void json_print::new_system_if_needed(int /*old_sp*/)
 {
     /* No-op for MVP. All primitives go into system 0 on each page. */
+}
+
+/*
+ * begin_system — called once per system from printsystem() (draw.cc), right
+ * after n_system++.  Records an anchor mapping the system's source line to
+ * its typeset position, for the frontend's editor-scroll-sync feature.
+ * dvi_v at this point is the top of the system (movev calls already applied
+ * by the caller before printsystem runs) -- same coordinate space primitives
+ * use, converted the same way via dvi_v_to_y.
+ */
+void json_print::begin_system(int source_line)
+{
+    if (source_line <= 0) return;  /* unknown -- skip (see get_system_source_line) */
+
+    JsonAnchor a;
+    a.line = source_line;
+    a.page = current_page_num;
+    a.y    = dvi_v_to_y(dvi_v);
+    anchors.push_back(a);
 }
 
 /* ================================================================
@@ -467,14 +488,19 @@ void json_print::set_a_char(unsigned char c)
         /* ff ligature: two f chars */
         run_text += 'f';
         run_text += 'f';
-    } else if (c == 0014) {
-        /* fi ligature */
+    } else if (c == 0014 || c == 0256) {
+        /* fi ligature — internal code 0014 (DVI path) and Adobe
+         * StandardEncoding slot 0256 (title.cc/special() pre-convert to
+         * this when the PS flag is set, which the JSON path also carries). */
         run_text += 'f';
         run_text += 'i';
-    } else if (c == 0015) {
-        /* fl ligature */
+    } else if (c == 0015 || c == 0257) {
+        /* fl ligature — internal 0015 and StandardEncoding slot 0257. */
         run_text += 'f';
         run_text += 'l';
+    } else if (c == 0246) {
+        /* long s (\sl) — StandardEncoding slot 0246; emit U+017F ſ. */
+        json_utf8_codepoint(run_text, 0x017F);
     } else if (c == 0031) {
         /* German ß (ss) — U+00DF */
         json_utf8_codepoint(run_text, 0x00DF);
@@ -664,8 +690,14 @@ void json_print::do_rtie(int bloc, int eloc)
 
     JsonPrimitive p;
     p.type        = JPRIM_RTIE;
-    p.tie_x       = save_h[bloc];
-    p.tie_y       = dvi_v_to_y(save_v[bloc]);
+    /* Anchor on the live cursor, not save_h/save_v[bloc].
+     * The sole caller (dvi_f.cc triplet ornament) does saveloc(bloc) then
+     * movev(...) BEFORE calling do_rtie, so save_v[bloc] != dvi_v at the call.
+     * ps_print's do_rtie emits PTIE (doslur) at the live PS cursor; we must
+     * mirror that or the triplet tie lands off by the movev. Same bug pattern
+     * as put_slash. Span still spans the saved registers. */
+    p.tie_x       = dvi_h;
+    p.tie_y       = dvi_v_to_y(dvi_v);
     p.tie_length  = save_h[eloc] - save_h[bloc];
     p.tie_variant = TIE_NORMAL;
     emit_primitive(p);
@@ -1069,6 +1101,20 @@ void json_print::write_json(const char *fname)
     }
     out += "  ],\n";
 
+    /* anchors array — per-system source-line -> typeset-position mapping,
+     * for the frontend's editor-scroll-sync feature. */
+    out += "  \"anchors\": [\n";
+    for (size_t ai = 0; ai < anchors.size(); ai++) {
+        const JsonAnchor &a = anchors[ai];
+        out += "    {\"line\": "; append_int(out, a.line);
+        out += ", \"page\": "; append_int(out, a.page);
+        out += ", \"y\": "; append_int(out, a.y);
+        out += "}";
+        if (ai + 1 < anchors.size()) out += ",";
+        out += "\n";
+    }
+    out += "  ],\n";
+
     /* errors[] is always empty in Phase 1 (one-shot CLI mode).
      * The bun-side parseTabErrors() reads stderr for errors, so this
      * doesn't break existing behaviour.  Phase 2 will hook dbg(Error,...)
@@ -1248,6 +1294,18 @@ void json_print::write_json_worker(const std::vector<CompilationError> &errors)
         out += "]}";  /* close systems and page */
     }
     out += "]";  /* close pages */
+
+    /* anchors array */
+    out += ",\"anchors\":[";
+    for (size_t ai = 0; ai < anchors.size(); ai++) {
+        const JsonAnchor &a = anchors[ai];
+        if (ai > 0) out += ",";
+        out += "{\"line\":"; append_int(out, a.line);
+        out += ",\"page\":"; append_int(out, a.page);
+        out += ",\"y\":"; append_int(out, a.y);
+        out += "}";
+    }
+    out += "]";
 
     /* errors array */
     out += ",\"errors\":[";

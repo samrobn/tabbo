@@ -43,6 +43,12 @@ class print {
     virtual void page_trail() = 0;
 
     virtual int do_page(i_buf *b, font_list *f_l[]) = 0;
+    /* Called once per system, at the top of printsystem() in draw.cc, with
+     * the 1-based source line that triggered this system's parse (0 if
+     * unknown).  No-op default -- only json_print overrides it, to record
+     * anchors for the frontend's editor-scroll-sync feature; ps_print and
+     * other backends are unaffected. */
+    virtual void begin_system(int /*source_line*/) {}
     void reset_dvi_vh()   { dvi_h=dvi_v=0;}
     virtual void p_moveh(const int hor) = 0;
     virtual void moveh(const double h)   { p_moveh (inch_to_dvi(h)); }

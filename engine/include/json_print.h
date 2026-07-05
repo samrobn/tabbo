@@ -119,6 +119,15 @@ struct JsonPage {
     JsonPage() : page_num(0) {}
 };
 
+/* One per typeset system: maps an original-source line back to where that
+ * system landed, for the frontend's editor-scroll-sync feature. */
+struct JsonAnchor {
+    int line;   /* 1-based source line that triggered this system's parse */
+    int page;   /* 1-based page number */
+    int y;      /* top of system, DVI units, same space as primitives */
+    JsonAnchor() : line(0), page(0), y(0) {}
+};
+
 struct JsonFontDesc {
     int    font_id;
     std::string family;
@@ -138,6 +147,9 @@ class json_print : public print {
     int current_page_num;    /* 1-based */
     int current_system_num;  /* 0-based within page */
     bool page_open;
+
+    /* editor-scroll-sync anchors, one per typeset system (see JsonAnchor) */
+    std::vector<JsonAnchor> anchors;
 
     /* text_run aggregation state */
     bool   run_open;
@@ -202,6 +214,7 @@ public:
     void page_trail() {}
 
     int  do_page(i_buf *b, font_list *f_l[]);
+    void begin_system(int source_line);
 
     void p_moveh(const int hor);
     void p_movev(const int ver);

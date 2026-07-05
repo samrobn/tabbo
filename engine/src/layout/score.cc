@@ -22,13 +22,9 @@
  */
 #include "win.h"
 #include "tab.h"
-// #include "dviprint.h"
 #include "print.h"
 #include "sizes.h"
 #include "system.h"
-#include "sound.h"
-#include "raw_snd.h"
-/* #include "midi_snd.h" */
 
 extern char interspace[];
 extern char staff_height[];
@@ -197,7 +193,6 @@ int find_note(
 int dot=0;
 int o_dot=0;
 int o_timeval=0;
-extern sound *sp;
 double conv=2;
 
 void
@@ -240,9 +235,6 @@ score(print *p, struct list *l, struct file_info *f,
 	  p->put_rule (str_to_inch(staff_height),
 		       10.0 * str_to_inch(mus_space)
 		       + str_to_inch (staff_height));
-	if (f->m_flags & SOUND) {
-	  sp->add_bar();
-	}
 	break;
     case '.':
 	p->movev(3.0 * str_to_inch(mus_space));
@@ -446,47 +438,6 @@ score(print *p, struct list *l, struct file_info *f,
 	    //  put_note(p, i-1, 255, timeval, f, ch);
 	    //}
 	  }
-	  if (f->m_flags & SOUND) {
-	    // timeval is from -2 to 5 - 128 to
-	    double t_val=0.0;
-	    switch (timeval) {
-	    case -2:
-	      t_val = 512;
-	      break;
-	    case -1:
-	      t_val = 256;
-	      break;
-	    case 0:
-	      t_val = 128;
-	      break;
-	    case 1:
-	      t_val = 64;
-	      break;
-	    case 2:
-	      t_val = 32;
-	      break;
-	    case 3:
-	      t_val = 16;
-	      break;
-	    case 4:
-	      t_val = 8;
-	      break;
-	    case 5:
-	      t_val = 4;
-	      break;
-	    }
-	    if (dot) t_val = 1.5 * t_val;
-	    //
-	    // handle rests here
-	    //
-	    if (ch[1] == 'M')
-	      ;
-	    else if (rest_note) {
-	      sp->rest(t_val/conv);
-	    }
-	    else
-	      sp->play(t_val/conv);
-	  }
 	}
 
 	dot = 0;
@@ -558,10 +509,6 @@ void put_note(print *p, int string, unsigned char c, int timeval, struct file_in
 	else p->put_a_char('?');
     }
     p->pop();
-
-    if ((f->m_flags & SOUND) && (ch[1] != 'M'))
-      sp->add(note);
-
 }
 
 void ledger(print *p, double dist)

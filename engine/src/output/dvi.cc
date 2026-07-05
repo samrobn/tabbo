@@ -27,7 +27,6 @@
 #include "tab.h"
 #include <errno.h>
 #include "print.h"
-#include "dviprint.h"
 #include "system.h"
 
 double tfm_dvi_to_inch(int dvi);

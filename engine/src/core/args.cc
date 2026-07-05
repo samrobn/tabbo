@@ -233,10 +233,6 @@ void set_P(const char *value, struct file_info *f) {
   f->flags |= PS;
   f->flags &= ~PDF;
   f->flags &= ~DVI_O;}
-void set_dvi(const char *value, struct file_info *f) {
-  f->flags |= DVI_O;
-  f->flags &= ~PDF;
-  f->flags &= ~PS;}
 void set_pdf(const char *value, struct file_info *f) {
 /*  void set_o(const char *value, struct file_info *f); */
 /*  now this runs the PS through ghostscript
@@ -407,16 +403,6 @@ void set_highlight_red(const char *value, struct file_info *f)
   f->m_flags |= RED;
 }
 
-void set_sound(const char *value, struct file_info *f)
-{
-  f->m_flags |= SOUND;
-  f->flags |= MANUSCRIPT;
-  f->m_flags |= QUIET;
-#ifndef NO_STDOUT
-  strncat (f->out_file, "stdout ", 6);	//  was /dev/null
-#endif
-}
-
 void set_alttitle(const char *value, struct file_info *f)
 {
   //        printf("args: setting alt title\n");
@@ -481,10 +467,6 @@ void set_EPSF(const char *value, struct file_info *f)
   f->m_flags |= EPSF;
 }
 
-void set_ascii(const char *value, struct file_info *f)
-{
-  f->m_flags |= ASCII;
-}
 void set_fontpath(const char *value, struct file_info *f)
 {
   extern char *font_path;
@@ -495,15 +477,6 @@ void set_fontpath(const char *value, struct file_info *f)
 void set_milan(const char *value, struct file_info *f)
 {
   f->m_flags |= MILAN;
-}
-void set_nmidi(const char *value, struct file_info *f)
-{
-  f->m_flags |= NMIDI;
-  f->m_flags |= QUIET;
-}
-void set_amidi_patch(const char *value, struct file_info *f)
-{
-  f->midi_patch = atoi(value);
 }
 void set_guitar(const char *value, struct file_info *f)
 {
@@ -696,7 +669,6 @@ void args(int argc, char ** argv, struct file_info *f)
 			    {(char*)"7", (void*)set_7},
 			    {(char*)"N", (void*)set_N},
 			    {(char*)"P", (void*)set_P},
-			    {(char*)"dvi", (void*)set_dvi},
 			    {(char*)"pdf", (void*)set_pdf},
 			    {(char*)"Q", (void*)set_Q},
 			    {(char*)"R7", (void*)set_R7},
@@ -725,8 +697,6 @@ void args(int argc, char ** argv, struct file_info *f)
 			    {(char*)"sharpNorm",    (void*)set_sharp_normal},
 			    {(char*)"highlightparen", (void*)set_highlight_paren},
 			    {(char*)"highlightred", (void*)set_highlight_red},
-			    {(char*)"sound", (void*)set_sound},
-			    {(char*)"midi", (void*)set_sound},
 			    {(char*)"alttitle", (void*)set_alttitle},
 			    {(char*)"alttitle-off", (void*)set_alttitle_off},
 			    {(char*)"a4", (void*)set_a4},
@@ -741,12 +711,9 @@ void args(int argc, char ** argv, struct file_info *f)
 			    {(char*)"allDsdown", (void*)set_allDsdown},
 			    {(char*)"modernNotes", (void*)set_ModNotes},
 			    {(char*)"EPSF", (void*)set_EPSF},
-			    {(char*)"ascii", (void*)set_ascii},
 			    {(char*)"wide", (void*)set_wide},
 			    {(char*)"fontpath", (void*)set_fontpath},
 			    {(char*)"milan", (void*)set_milan},
-			    {(char*)"nmidi", (void*)set_nmidi},
-			    {(char*)"midi-patch", (void*)set_amidi_patch},
 			    {(char*)"guitar", (void*)set_guitar},
 			    {(char*)"staff-line-thickness", (void*)set_line_thickness},
 			    {(char*)"thin", (void*)set_thin_font},

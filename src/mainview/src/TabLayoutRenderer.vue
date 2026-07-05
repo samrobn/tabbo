@@ -2,10 +2,11 @@
 import { computed } from 'vue'
 import type { LayoutResult } from '../../shared/rpc-types'
 import { dviToPt, toRenderItem, buildFontMap } from '../../shared/layout-render'
+import { pageDisplayWidthPx as computeDisplayWidthPx, type ZoomState } from '../../shared/zoom'
 
 interface Props {
   layout: LayoutResult | null
-  zoomLevel: number
+  zoomLevel: ZoomState
   containerWidth: number
 }
 
@@ -19,9 +20,13 @@ const fontMap = computed(() =>
   props.layout ? buildFontMap(props.layout) : new Map(),
 )
 
-// Display width in px: container minus 32px padding, scaled by zoom
+// Display width in px: zoom % of the live container's fit width. Recomputed
+// from containerWidth on every render, so it tracks panel resizes while
+// staying that fraction of the panel (sticky, panel-relative). See
+// src/shared/zoom.ts.
 const pageDisplayWidthPx = computed((): number => {
-  return Math.round((props.containerWidth - 32) * (props.zoomLevel / 100))
+  if (!props.layout) return 0
+  return computeDisplayWidthPx(props.zoomLevel, props.containerWidth)
 })
 
 // SVG viewBox dimensions and content-origin offsets in points (DVI → pt).
@@ -155,5 +160,8 @@ const renderedPages = computed(() => {
 .tab-page {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
   background: white;
+  /* Centre when narrower than the panel; auto margins collapse to 0 when wider,
+     keeping the left edge reachable in the overflow-auto container. */
+  margin-inline: auto;
 }
 </style>

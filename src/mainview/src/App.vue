@@ -5,10 +5,11 @@ import TabCodeEditor from './components/TabCodeEditor.vue'
 import TabPreview from './components/TabPreview.vue'
 import HelpPanel from './components/HelpPanel.vue'
 import UpdateModal from './components/UpdateModal.vue'
-import { DEFAULT_TAB_CONTENT, COMPILE_MESSAGES, STORAGE_KEYS, AUTO_SAVE_INTERVAL_MS } from './constants'
+import { DEFAULT_TAB_CONTENT, COMPILE_MESSAGES, STORAGE_KEYS, AUTO_SAVE_INTERVAL_MS, UPDATE_CHECK_INTERVAL_MS, EXPORT_STATUS_DISPLAY_MS } from './constants'
 import { examples } from './examples'
 import type { TabboRPC, LayoutResult, Settings, CompilationError, UpdateStatus, SaveResult } from '../../shared/rpc-types'
 import { addRecentDir } from '../../shared/recent-dirs'
+import type { ScrollPosition } from '../../shared/scroll-sync'
 import { startCaptureWorker } from './composables/useCaptureWorker'
 
 // CSS px per pt at the canonical 96 DPI reference pixel density (1pt = 1/72 in, 1px = 1/96 in)
@@ -79,7 +80,8 @@ const rpc = Electroview.defineRPC<TabboRPC>({
 
 const electrobun = new Electrobun.Electroview({ rpc })
 
-const editorRef = ref<{ toggleSearch: () => void } | null>(null)
+const editorRef = ref<{ toggleSearch: () => void; setScrollPosition: (position: ScrollPosition) => void } | null>(null)
+const previewRef = ref<{ setScrollPosition: (position: ScrollPosition) => void } | null>(null)
 
 const tabContent = ref<string>(DEFAULT_TAB_CONTENT)
 const layoutResult = ref<LayoutResult | null>(null)
@@ -108,6 +110,35 @@ function persistSplit(): void {
 function resetSplit(): void {
   editorWidthPct.value = 50
   persistSplit()
+}
+
+// Scroll sync: line-domain sync between the editor and preview panes (fraction
+// fallback when either side can't map a line - no anchors/layout yet), toggled
+// from the preview's zoom cluster. Default on; persisted like the split.
+function readPersistedScrollSync(): boolean {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.SCROLL_SYNC)
+    if (stored !== null) return stored === 'true'
+  } catch { /* localStorage unavailable */ }
+  return true
+}
+const scrollSyncEnabled = ref<boolean>(readPersistedScrollSync())
+
+function setScrollSyncEnabled(value: boolean): void {
+  scrollSyncEnabled.value = value
+  try { localStorage.setItem(STORAGE_KEYS.SCROLL_SYNC, String(value)) } catch { /* localStorage unavailable */ }
+}
+
+// Only the hovered pane emits scroll-position (see TabCodeEditor/TabPreview) - the
+// non-hovered follower's own programmatic scroll never re-emits, so no debounce
+// or origin-tracking is needed here to prevent a feedback loop.
+function handleEditorScrollPosition(position: ScrollPosition): void {
+  if (!scrollSyncEnabled.value) return
+  previewRef.value?.setScrollPosition(position)
+}
+function handlePreviewScrollPosition(position: ScrollPosition): void {
+  if (!scrollSyncEnabled.value) return
+  editorRef.value?.setScrollPosition(position)
 }
 
 function startSplitDrag(event: PointerEvent): void {
@@ -175,6 +206,7 @@ const isApplyingUpdate = ref<boolean>(false)
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
+let updateCheckTimer: ReturnType<typeof setInterval> | null = null
 let exportStatusTimer: ReturnType<typeof setTimeout> | null = null
 let stopCaptureWorker: (() => void) | null = null
 let skipNextCompile = false
@@ -304,6 +336,15 @@ function resolveConfirm(value: boolean): void {
  */
 function handleUpdateStatus(status: UpdateStatus): void {
   if (status.phase === 'available') {
+    // Don't clobber an in-flight flow: the periodic re-check keeps getting
+    // available: true from the bun side for a version that is already
+    // available (modal showing), downloading, or downloaded-and-ready, and
+    // resetting the phase here would knock the progress UI / "Restart now"
+    // screen back to "Install now" (and allow a re-entrant download).
+    const currentPhase = updateStatus.value?.phase
+    if (currentPhase === 'available' || currentPhase === 'downloading' || currentPhase === 'ready') {
+      return
+    }
     const snoozed = localStorage.getItem(STORAGE_KEYS.UPDATE_SNOOZED_VERSION)
     // Only suppress when we have a concrete version to compare - null version
     // (Electrobun pushed event before version is known) must not collide with
@@ -324,6 +365,28 @@ function handleUpdateStatus(status: UpdateStatus): void {
     isApplyingUpdate.value = false
   }
   updateStatus.value = status
+}
+
+/**
+ * Ask the bun side whether an update is available and, if so, route it
+ * through `handleUpdateStatus` so the snooze guard applies identically
+ * whether this fires from the launch check or the periodic re-check.
+ * Best-effort: a network blip or thrown error is swallowed, the next
+ * check (launch or interval) will retry.
+ */
+async function checkForUpdates(): Promise<void> {
+  try {
+    const info = await electrobun.rpc!.request.checkForUpdate({})
+    if (info.available) {
+      handleUpdateStatus({
+        phase: 'available',
+        version: info.version,
+        changelog: info.changelog,
+      })
+    }
+  } catch {
+    // Update check is best-effort; don't surface errors to the user
+  }
 }
 
 function snoozeUpdate(): void {
@@ -404,6 +467,12 @@ async function openFile(): Promise<void> {
     })
   } catch (error) {
     console.error('Failed to open file:', error)
+    // Electrobun rejections can arrive as a bare string (not an Error instance),
+    // so fall back to String(error) rather than a generic "Unknown error" —
+    // that string is the only place the underlying reason (e.g. a TCC
+    // permission denial) survives the RPC boundary.
+    const message = error instanceof Error ? error.message : String(error)
+    showExportStatus(false, message)
   }
 }
 
@@ -488,7 +557,7 @@ function showExportStatus(success: boolean, message: string): void {
   exportStatusTimer = setTimeout(() => {
     exportStatus.value = null
     exportStatusTimer = null
-  }, 4_000)
+  }, EXPORT_STATUS_DISPLAY_MS)
 }
 
 async function exportPdf(): Promise<void> {
@@ -809,20 +878,14 @@ onMounted(async () => {
   // Fires silently on dev channel (bun side returns available: false immediately).
   // webview→bun requests don't have the focus gate that affects bun→webview pushes,
   // so 500ms is sufficient - matching the getLayout delay above.
-  setTimeout(async () => {
-    try {
-      const info = await electrobun.rpc!.request.checkForUpdate({})
-      if (info.available) {
-        handleUpdateStatus({
-          phase: 'available',
-          version: info.version,
-          changelog: info.changelog,
-        })
-      }
-    } catch {
-      // Update check is best-effort; don't surface errors to the user
-    }
-  }, 500)
+  setTimeout(checkForUpdates, 500)
+
+  // Re-check periodically so a release published mid-session surfaces without
+  // requiring a restart (a running session can span hours-to-days). Cadence is
+  // generous relative to the realistic days-to-weeks release cadence - see
+  // UPDATE_CHECK_INTERVAL_MS. Reuses checkForUpdates/handleUpdateStatus so the
+  // snooze guard applies identically to the launch check and this re-check.
+  updateCheckTimer = setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS)
 
   stopCaptureWorker = startCaptureWorker({
     setLayout: (l) => { layoutResult.value = l },
@@ -836,6 +899,7 @@ onUnmounted(() => {
   window.removeEventListener('blur', saveToLocalStorage)
   if (debounceTimer) clearTimeout(debounceTimer)
   if (autoSaveTimer) clearInterval(autoSaveTimer)
+  if (updateCheckTimer) clearInterval(updateCheckTimer)
   if (exportStatusTimer) clearTimeout(exportStatusTimer)
   if (confirmResolver) { confirmResolver(false); confirmResolver = null }
   if (quitResolver) { quitResolver('cancel'); quitResolver = null }
@@ -898,7 +962,13 @@ onUnmounted(() => {
         :style="{ '--editor-width': editorWidthPct + '%' }"
         :class="activeTab === 'editor' ? 'block' : 'hidden md:block'"
       >
-        <TabCodeEditor ref="editorRef" v-model="tabContent" :error-lines="errorLines" :font-size="fontSize">
+        <TabCodeEditor
+          ref="editorRef"
+          v-model="tabContent"
+          :error-lines="errorLines"
+          :font-size="fontSize"
+          @scroll-position="handleEditorScrollPosition"
+        >
           <template #header>
             <div class="relative">
               <button
@@ -965,8 +1035,12 @@ onUnmounted(() => {
       />
       <div class="w-full md:flex-1 md:min-w-0 bg-white" :class="activeTab === 'preview' ? 'block' : 'hidden md:block'">
         <TabPreview
+          ref="previewRef"
           :layout="layoutResult"
           :is-loading="isCompiling"
+          :scroll-sync="scrollSyncEnabled"
+          @update:scroll-sync="setScrollSyncEnabled"
+          @scroll-position="handlePreviewScrollPosition"
         />
       </div>
     </main>

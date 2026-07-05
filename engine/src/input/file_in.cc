@@ -47,6 +47,7 @@ file_in::file_in(const char * fname, const char *mode)
     }
     strncpy(fn, fname, 1023);
     fn[1023] = '\0';
+    curLine = 0;
     _file_in(fname, mode);
 }
 
@@ -131,6 +132,7 @@ file_in::~file_in()
 file_in::file_in()
 {
     char fname[1024];
+    curLine = 0;
 #ifdef MAC
     OSErr error;
     short refNum;
@@ -211,7 +213,15 @@ int file_in::Seek(const long offset, const int how)
 char * file_in::GetLine(char *buf, int buflen)
 {
   int i = buflen;
-  unsigned char *tbuf = (unsigned char *)buffer::GetLine(buf, buflen);
+  unsigned char *tbuf;
+
+  /* curLine counts original-source lines for the JSON anchors feature
+   * (source line -> typeset position).  It lives here, not in
+   * buffer::GetLine, because i_buf (the pass2 intermediate buffer) is also
+   * a buffer subclass and re-reads its own lines in pass2 via GetLine --
+   * bumping the counter there would double-count and drift. */
+  curLine++;
+  tbuf = (unsigned char *)buffer::GetLine(buf, buflen);
 
   while (--i) {
     if (tbuf[i] ==147 || tbuf[i] == 148 )

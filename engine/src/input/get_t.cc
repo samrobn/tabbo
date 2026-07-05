@@ -21,6 +21,7 @@
 #include "file_in.h"
 #include "i_buf.h"
 #include "system.h"
+#include <vector>
 
 void include(i_buf *ib, struct file_info *f, char file []);
 int getsystem(file_in *fi, i_buf *ib, struct file_info *f, char buf[]);
@@ -28,6 +29,31 @@ void args_from_string(char *buf, struct file_info *f);
 void get_tab_file(file_in *fi, i_buf *ib, struct file_info *f);
 
 int  setflag(file_info *f, char * string, pass pass);
+
+/* Per-system source line, recorded in pass1 order (one push per system,
+ * same order printsystem() walks them in pass2 -- see get_system_source_line).
+ * Feeds the JSON "anchors" array (editor-line -> typeset-position mapping). */
+static std::vector<int> system_source_lines;
+
+void record_system_source_line(int line)
+{
+    system_source_lines.push_back(line);
+}
+
+/* index is the pass2-side n_system count, 0-based (n_system - 1).  Returns 0
+ * (unknown) if out of range -- callers must skip anchors with line 0. */
+int get_system_source_line(int index)
+{
+    if (index < 0 || index >= (int)system_source_lines.size())
+        return 0;
+    return system_source_lines[index];
+}
+
+/* Called by reset_engine_state() in worker.cc before each layout command. */
+void reset_get_t_statics(void)
+{
+    system_source_lines.clear();
+}
 
 int badchar(unsigned char p) {
   if ( p == 255 )
@@ -229,6 +255,7 @@ void get_tab_file(file_in *fi, i_buf *ib, struct file_info *f)
 
       break;
     default:		/* assume that it must be lines of chords */
+      record_system_source_line(fi->curLine);
       r = getsystem(fi, ib, f, buf);	/* get line tab */
       f->cur_system++;
       if (!r) {

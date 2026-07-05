@@ -74,6 +74,7 @@ extern void reset_tab_p_statics(void);
 extern void reset_dvi_f_statics(void);
 extern void reset_getsys_statics(void);
 extern void reset_pass2_statics(void);
+extern void reset_get_t_statics(void);
 
 /* ====================================================================
  * reset_engine_state
@@ -173,6 +174,7 @@ void reset_engine_state(file_info *f)
     reset_dvi_f_statics();
     reset_getsys_statics();
     reset_pass2_statics();
+    reset_get_t_statics();
 
     /* Dormant statics not yet reset (YAGNI — currently unreachable in the
      * JSON-mode worker path which bypasses pk/tfm bitmap loading):

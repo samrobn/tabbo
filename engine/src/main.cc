@@ -7,16 +7,8 @@
 #include "i_buf.h"
 #include "file_in.h"
 #include "print.h"
-#include "dviprint.h"
 #include "ps_print.h"
-#include "pdf_print.h"
 #include "json_print.h"
-#include "ascii.h"
-#include "nmidi.h"
-
-#include "sound.h"
-#include "midi_snd.h"
-#include "raw_snd.h"
 
 #ifdef __unix__
 #include <signal.h>
@@ -35,8 +27,6 @@ void run_worker_loop(file_info *f);
 int my_main(int flags);
 #endif /* MAC */
 
-extern double conv;
-sound *sp=0;
 extern char staff_height[];
 
 int baroque;
@@ -103,14 +93,11 @@ void init(file_info *f)
 char *
 get_real_name(const char *short_name, int dump);
 				/* this bit loads in the tfm metrics */
-nmidi *np=0;
 
 void tfm_stuff(i_buf *b, file_info *f)
 {
     print **pp;
-    dvi_print *pdp = 0;
     ps_print *psp = 0;
-    pdf_print *pdfp = 0;
     json_print *jsp = 0;
     struct font_list *f_a[MAXFONTS];
     int i, more=END_MORE;
@@ -192,7 +179,7 @@ void tfm_stuff(i_buf *b, file_info *f)
 	jsp = new json_print(f_a, f);
 	pp = (print **)&jsp;
     }
-    else if (f->flags & PS ) {
+    else {
 	if (f->font_names[1]) {	// words
 	  f_a[1] = init_font_list(1, f->font_names[1], 1.2 );
 	  f_a[1]->real_name = get_real_name(f->font_names[1], 0);
@@ -228,117 +215,13 @@ void tfm_stuff(i_buf *b, file_info *f)
 	psp = new ps_print (f_a, f);
 	pp = (print **)&psp;
     }
-    else if (f->flags & PDF ) {
-      fprintf (stderr, "PDF!\n");
-	if (f->font_names[1]) {	// words
-	  f_a[1] = init_font_list(1, f->font_names[1], 1.2 );
-	  f_a[1]->real_name = get_real_name(f->font_names[1], 0);
-	}
-	else
-	  f_a[1] = init_font_list(1, "pncr", 1.0 );
-
-	if (f->font_names[2]) {	// title
-	  f_a[2] = init_font_list(2, f->font_names[2], f->font_sizes[2]/10. );
-	  f_a[2]->real_name = get_real_name(f->font_names[2], 0);
-	}
-	else
-	  f_a[2] = init_font_list(2, "pncr", f->font_sizes[2]/10.);
-
-	if (f->font_names[3]) {	// italic title
-	  f_a[3] = init_font_list(3, f->font_names[3], 1.2 );
-	  f_a[3]->real_name = get_real_name(f->font_names[3], 0);
-	}
-	else
-	  f_a[3] = init_font_list(3, "pncri", 1.2 );
-
-	f_a[4] = init_font_list(4, "pncr", 2.4 );
-
-	if (f->font_names[5]) {	// italic text
-	  f_a[5] = init_font_list(5, f->font_names[5], 1.0 );
-	  f_a[5]->real_name = get_real_name(f->font_names[5], 0);
-	}
-	else
-	  f_a[5] = init_font_list(5, "pncri", 1.0 );
-	f_a[6] = init_font_list(6, "pncr", 1.0 );
-	f_a[7] = init_font_list(7, "pncr", 1.0 / red );
-
-	pdfp = new pdf_print (f_a, f);
-	pp = (print **)&pdfp;
-    }
-    else {			/* dvi */
-
-	if (f->font_names[1])
-	  f_a[1] = init_font_list(1, f->font_names[1], 1.0);
-	else
-	  f_a[1] = init_font_list(1, "cmr10", 1.0);
-
-	if (f->font_names[2])
-	  f_a[2] = init_font_list(2, f->font_names[2], 1.0);
-	else
-	  f_a[2] = init_font_list(2, "cmr12", 1.0);
-
-	if (f->font_names[3])
-	  f_a[3] = init_font_list(3, f->font_names[3], 1.0);
-	else
-	  f_a[3] = init_font_list(3, "cmr12", 1.0);
-
-	f_a[4] = 0;
-
-	if (f->font_names[5])
-	  f_a[5] = init_font_list(5, f->font_names[5], 1.0);
-	else f_a[5] = init_font_list(5, "cmti10", 1.0);
-
-	f_a[6] = 0;
-	f_a[7] = 0;
-
-	pdp = new dvi_print(f_a, f);
-	pp = (print **)&pdp;
-    }
-    // this seems to be where an old style midi file is started
-    if (f->m_flags & SOUND) {
-      if (!sp) {
-	if (!f->midi_patch)  f->midi_patch = 34;
-	if (!strncmp(f->out_file, "stdout", 6))
-	  sp = new midi_snd(f->midi_patch, f->midi_volume, f->file, "stdout");
-	else if (strlen(f->out_file))
-	  sp = new midi_snd(f->midi_patch, f->midi_volume, f->file, f->out_file);
-	else
-	  sp = new midi_snd(f->midi_patch, f->midi_volume, f->file);
-      }
-      // wbc sept 2014
-      //	else {			// no midi patch
-      //	  if (!strncmp(f->out_file, "stdout", 6))
-      //	    sp = new midi_snd(34, f->midi_volume , "stdout");
-      //	  else
-      //	    sp = new midi_snd;
-      //	}
-    }
-    else if (f->m_flags & NMIDI) {
-      np = new nmidi();
-    }
 
     while (more == END_MORE) {
 	(*pp)->page_head();
 	more = (*pp)->do_page(b, f_a);
 	(*pp)->page_trail();
     }
-    if (sp) {
-      delete sp;
-      sp = 0;
-    }
-    if (np) {
-      if (f->title)
-	np->set_nmidi_title(f->title);
-      if (f->midi_patch)
-	np->set_patch(f->midi_patch);
-      if (conv != 2) {
-	np->set_pulse(conv);
-      }
-    }
-    if (np) delete (np);
     if (psp) delete psp;
-    if (pdp) delete pdp;
-    if (pdfp) delete pdfp;
     if (jsp) delete jsp;
     if (f_a[0]) f_a[0] = delete_font_list(f_a[0]);
     if (f_a[1]) f_a[1] = delete_font_list(f_a[1]);

@@ -2010,15 +2010,27 @@ struct list *l)			/* data */
 
   if (l->text) {
     do_text(p, i_b, f_a, l, l->text, f, 0, 1);
-    free (l->text->words->words); /* leak */
-    free (l->text->words); /* leak */
+    /* Walk the full t_words chain (tab_p.cc builds it via ->next);
+     * mirrors the pass2.cc cleanup walk. */
+    struct t_words *tw = l->text->words;
+    while (tw) {
+      struct t_words *tw_next = tw->next;
+      if (tw->words) free(tw->words);
+      free(tw);
+      tw = tw_next;
+    }
     free (l->text);
     l->text = NULL;
   }
   if (l->text2) {
     do_text(p, i_b, f_a, l, l->text2, f, 0, 2);
-    free (l->text2->words->words);
-    free (l->text2->words);
+    struct t_words *tw2 = l->text2->words;
+    while (tw2) {
+      struct t_words *tw2_next = tw2->next;
+      if (tw2->words) free(tw2->words);
+      free(tw2);
+      tw2 = tw2_next;
+    }
     free (l->text2);
     l->text2 = NULL;
   }
