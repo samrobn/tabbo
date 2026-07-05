@@ -8,6 +8,10 @@ import {
 
 type StatusSender = (status: UpdateStatus) => void;
 
+// Changelog fetch is best-effort (see checkForUpdate); keep it short so a
+// slow/unreachable host doesn't stall the update check the user is waiting on.
+const CHANGELOG_FETCH_TIMEOUT_MS = 5_000;
+
 /**
  * Register a callback that receives UpdateStatus whenever the Electrobun
  * update state machine transitions. Call once after the main window is created.
@@ -55,7 +59,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
 				const baseUrl = await Updater.localInfo.baseUrl();
 				const changelogUrl = buildChangelogUrl(baseUrl);
 				const response = await fetch(changelogUrl, {
-					signal: AbortSignal.timeout(5000),
+					signal: AbortSignal.timeout(CHANGELOG_FETCH_TIMEOUT_MS),
 				});
 				if (response.ok) {
 					const changelogText = await response.text();

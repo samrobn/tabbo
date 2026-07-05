@@ -5,7 +5,6 @@
 #include "win.h"
 #include "tab.h"
 #include "print.h"
-#include "dviprint.h"
 #include "dvi.h"
 #include "i_buf.h"
 

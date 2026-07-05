@@ -7,6 +7,8 @@ import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { tab } from '../codemirror/tab-language'
 import { search, setSearchQuery, getSearchQuery, SearchQuery, findNext, findPrevious } from '@codemirror/search'
 import { currentMatchIndex, matchToSelect, type MatchRange } from '../../../shared/search-match'
+import { computeScrollbarMarkers, type MatchLine } from '../../../shared/scrollbar-markers'
+import { scrollFraction, scrollTopForFraction, clampScrollTop, type ScrollPosition } from '../../../shared/scroll-sync'
 
 interface Props {
   modelValue: string
@@ -21,6 +23,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'scroll-position': [position: ScrollPosition]
 }>()
 
 const editorContainer = ref<HTMLElement | null>(null)
@@ -38,6 +41,63 @@ let searchAnchor = 0
 // cleared on mouseup. Held here so onUnmounted can detach a listener still live
 // if the component tears down mid-drag.
 let detachBlinkFreeze: (() => void) | null = null
+// Active WKWebView focus-reveal guard (see the mousedown handler): scroll
+// position to hold and the deadline it holds until. Null when disarmed.
+const FOCUS_SCROLL_GUARD_MS = 250
+let focusScrollGuard: { scrollTop: number; until: number } | null = null
+// Detaches a pending scrollbar-refocus mouseup listener (see the focusin
+// handler in onMounted); held so onUnmounted can clear one still in flight.
+let detachRefocus: (() => void) | null = null
+
+// Scroll sync: only the hovered pane emits scroll-position (loop prevention -
+// a programmatic setScrollPosition write on the unhovered follower never
+// re-emits). App.vue owns the enabled/disabled state and the other pane's ref.
+//
+// The editor always knows its own top visible line (CM6's line-block APIs
+// don't depend on anchors), so it emits a real `line`, never null. The
+// preview may emit null (no anchors/layout yet) - in that case we fall back
+// to `fraction`.
+const isHovered = ref<boolean>(false)
+let onEditorScroll: (() => void) | null = null
+
+// Fractional source line (1-based, may have a fractional part) currently at
+// the top of the viewport. `lineBlockAtHeight` returns the block spanning
+// that scroll height regardless of line-wrapping, so this stays accurate
+// under EditorView.lineWrapping.
+// CM6's lineBlockAtHeight/lineBlockAt report positions in document space,
+// which excludes .cm-content's `padding: '12px 0'` (view.documentPadding.top);
+// scrollDOM.scrollTop is measured in the scroller's space, which includes it.
+// Every conversion between the two must add/subtract that padding.
+function topVisibleLine(view: EditorView): number {
+  const docScrollTop = Math.max(0, view.scrollDOM.scrollTop - view.documentPadding.top)
+  const block = view.lineBlockAtHeight(docScrollTop)
+  const lineNumber = view.state.doc.lineAt(block.from).number
+  const fractionWithinBlock = block.height > 0 ? (docScrollTop - block.top) / block.height : 0
+  return lineNumber + fractionWithinBlock
+}
+
+// Inverse of topVisibleLine: scrollTop that puts `fractionalLine` at the
+// viewport top. The integer part selects the doc line (clamped to its valid
+// range); the fractional remainder places the target within that line's
+// block - both computed from the clamped line so out-of-range inputs pin to
+// the boundary line's start/end rather than extrapolating past it.
+function scrollTopForLine(view: EditorView, fractionalLine: number): number {
+  const totalLines = view.state.doc.lines
+  const clampedFractionalLine = Math.min(totalLines, Math.max(1, fractionalLine))
+  const clampedLine = Math.floor(clampedFractionalLine)
+  const withinLineFraction = clampedFractionalLine - clampedLine
+  const block = view.lineBlockAt(view.state.doc.line(clampedLine).from)
+  return block.top + withinLineFraction * block.height + view.documentPadding.top
+}
+
+function setScrollPosition(position: ScrollPosition): void {
+  const view = editorView.value
+  if (!view) return
+  const target = position.line !== null
+    ? scrollTopForLine(view, position.line)
+    : scrollTopForFraction(position.fraction, view.scrollDOM.scrollHeight, view.scrollDOM.clientHeight)
+  view.scrollDOM.scrollTop = clampScrollTop(target, view.scrollDOM.scrollHeight, view.scrollDOM.clientHeight)
+}
 
 const countLabel = computed(() => {
   if (!queryStr.value) return ''
@@ -165,22 +225,108 @@ function closeSearch(): void {
   // Clear highlights + count, but keep queryStr so reopening restores it.
   view?.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: '' })) })
   matchCount.value = { current: 0, total: 0 }
+  // Refocusing from the search field is the same WebKit focus-restore
+  // transition the mousedown handler guards — pin the viewport so closing
+  // search doesn't scroll back to an off-screen caret.
+  if (view) {
+    focusScrollGuard = { scrollTop: view.scrollDOM.scrollTop, until: performance.now() + FOCUS_SCROLL_GUARD_MS }
+  }
   view?.focus()
 }
 
 // Whole-document match list (the engine's canonical non-overlapping tiling).
+// Memoised on (doc, query) identity: both the scrollbar rail and recompute()
+// run on the same triggers, so without the cache every keystroke with the
+// widget open would scan a potentially huge document twice. Both are
+// immutable, identity-stable objects (the highlighter already relies on
+// getSearchQuery identity to detect query changes), so a plain === check is
+// a sound cache key. Per-component-instance state is unnecessary — the cache
+// self-corrects on any doc/query difference, so instances can share it.
+let matchCache: { doc: unknown; query: SearchQuery; matches: MatchRange[] } | null = null
 function enumerateMatches(view: EditorView): MatchRange[] {
   const query = getSearchQuery(view.state)
+  const doc = view.state.doc
+  if (matchCache && matchCache.doc === doc && matchCache.query === query) return matchCache.matches
   const out: MatchRange[] = []
-  if (!query.valid) return out
-  const cursor = query.getCursor(view.state)
-  let next = cursor.next()
-  while (!next.done) {
-    out.push({ from: next.value.from, to: next.value.to })
-    next = cursor.next()
+  if (query.valid) {
+    const cursor = query.getCursor(view.state)
+    let next = cursor.next()
+    while (!next.done) {
+      out.push({ from: next.value.from, to: next.value.to })
+      next = cursor.next()
+    }
   }
+  matchCache = { doc, query, matches: out }
   return out
 }
+
+// Search-match scrollbar rail (VS Code-style "overview ruler"). A canvas
+// strip pinned to the editor's right edge, not the OS scrollbar track
+// itself (macOS overlay scrollbars only draw during scroll; the rail must
+// stay visible regardless). Canvas over one DOM element per match keeps
+// dense documents cheap — computeScrollbarMarkers collapses same-pixel-row
+// matches before anything is drawn, so a match-dense document never smears
+// the rail or stacks thousands of overlapping nodes.
+const SEARCH_RAIL_WIDTH = 7
+// amber-500 / orange-600 (Tailwind) — task 20260630-AF8M: the previous
+// amber-200/orange-400 pair read as barely-visible pastel against the
+// light editor background. These hold VS Code overview-ruler-style weight
+// at a glance while keeping the active match clearly darker/stronger.
+const SEARCH_RAIL_MATCH_COLOR = '#f59e0b'
+const SEARCH_RAIL_ACTIVE_COLOR = '#ea580c'
+
+const searchScrollbarRail = ViewPlugin.fromClass(class {
+  canvas: HTMLCanvasElement
+  constructor(view: EditorView) {
+    this.canvas = document.createElement('canvas')
+    this.canvas.className = 'cm-searchRail'
+    view.dom.appendChild(this.canvas)
+    this.draw(view)
+  }
+  update(update: ViewUpdate) {
+    // Query change covers open/close (close sets the query to '', which
+    // enumerateMatches treats as invalid → no matches → rail clears) and
+    // query edits; docChanged/selectionSet cover edits and active-match
+    // changes; geometryChanged covers resizes changing the rail's pixel height.
+    if (
+      update.docChanged ||
+      update.selectionSet ||
+      update.geometryChanged ||
+      getSearchQuery(update.state) !== getSearchQuery(update.startState)
+    ) {
+      this.draw(update.view)
+    }
+  }
+  draw(view: EditorView): void {
+    const height = view.dom.clientHeight
+    const dpr = window.devicePixelRatio || 1
+    this.canvas.style.height = `${height}px`
+    this.canvas.width = SEARCH_RAIL_WIDTH * dpr
+    this.canvas.height = Math.max(height, 1) * dpr
+    const ctx = this.canvas.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
+    const matches = enumerateMatches(view)
+    if (matches.length === 0) return
+    const sel = view.state.selection.main
+    const totalLines = view.state.doc.lines
+    const matchLines: MatchLine[] = matches.map((match) => ({
+      line: view.state.doc.lineAt(match.from).number,
+      active: match.from === sel.from && match.to === sel.to,
+    }))
+    const markers = computeScrollbarMarkers(matchLines, totalLines, height)
+    ctx.save()
+    ctx.scale(dpr, dpr)
+    for (const marker of markers) {
+      ctx.fillStyle = marker.active ? SEARCH_RAIL_ACTIVE_COLOR : SEARCH_RAIL_MATCH_COLOR
+      ctx.fillRect(1, marker.top, SEARCH_RAIL_WIDTH - 2, 2)
+    }
+    ctx.restore()
+  }
+  destroy(): void {
+    this.canvas.remove()
+  }
+})
 
 function recompute(): void {
   const view = editorView.value
@@ -235,7 +381,7 @@ function onQueryInput(): void {
   recompute()
 }
 
-defineExpose({ toggleSearch })
+defineExpose({ toggleSearch, setScrollPosition })
 
 // Create editor on mount
 onMounted(() => {
@@ -268,7 +414,32 @@ onMounted(() => {
       // root on mousedown and a CSS rule (with !important, to beat the inline
       // animation-name) stops the animation until mouseup.
       EditorView.domEventHandlers({
-        mousedown: (_event, view) => {
+        mousedown: (event, view) => {
+          // WKWebView asynchronously scrolls the editor back to the previous
+          // caret ~10ms after a mousedown refocuses the content (an async
+          // selection reveal that CM's focusPreventScroll can't suppress —
+          // preventScroll only covers the focus call itself). Pin the scroll
+          // position for a short window so the reveal is snapped back before
+          // CM's drag-tracking turns it into a runaway selection. Text-area
+          // mousedowns only: arming on scrollbar grabs would fight the drag.
+          if (!view.hasFocus && view.contentDOM.contains(event.target as Node)) {
+            focusScrollGuard = { scrollTop: view.scrollDOM.scrollTop, until: performance.now() + FOCUS_SCROLL_GUARD_MS }
+            // WebKit also restores the editable's previous DOM selection on
+            // refocus; CM's observer reads that mid-click and extends the
+            // selection to the old caret (shift-click effect). Pre-seat the
+            // DOM selection at the click point so the restore is a no-op —
+            // except on a real shift-click, where extending from the old
+            // caret is exactly what the user is asking for (and pre-seating
+            // would collapse the anchor CM extends from).
+            if (!event.shiftKey) {
+              const caretRange = document.caretRangeFromPoint?.(event.clientX, event.clientY)
+              if (caretRange) {
+                const domSelection = window.getSelection()
+                domSelection?.removeAllRanges()
+                domSelection?.addRange(caretRange)
+              }
+            }
+          }
           view.dom.classList.add('cm-mouse-down')
           const onUp = () => {
             view.dom.classList.remove('cm-mouse-down')
@@ -287,6 +458,7 @@ onMounted(() => {
       errorLinesField,
       search(),
       searchHighlighter,
+      searchScrollbarRail,
       updateListener,
       EditorView.lineWrapping,
       fontSizeConf.of(fontSizeTheme(props.fontSize)),
@@ -343,6 +515,56 @@ onMounted(() => {
     state: startState,
     parent: editorContainer.value,
   })
+
+  onEditorScroll = () => {
+    if (!isHovered.value) return
+    const view = editorView.value
+    if (!view) return
+    emit('scroll-position', {
+      line: topVisibleLine(view),
+      fraction: scrollFraction(view.scrollDOM.scrollTop, view.scrollDOM.scrollHeight, view.scrollDOM.clientHeight),
+    })
+  }
+  editorView.value.scrollDOM.addEventListener('scroll', onEditorScroll)
+
+  // Enforce the WKWebView focus-reveal guard armed in the mousedown handler:
+  // any scroll away from the pinned position inside the guard window is
+  // snapped straight back. The corrective write re-fires this listener with a
+  // zero delta, so it settles immediately. A wheel gesture disarms — that's
+  // the user genuinely scrolling.
+  const guardedScroller = editorView.value.scrollDOM
+  guardedScroller.addEventListener('scroll', () => {
+    if (!focusScrollGuard) return
+    if (performance.now() > focusScrollGuard.until) {
+      focusScrollGuard = null
+      return
+    }
+    if (Math.abs(guardedScroller.scrollTop - focusScrollGuard.scrollTop) > 1) {
+      guardedScroller.scrollTop = focusScrollGuard.scrollTop
+    }
+  })
+  guardedScroller.addEventListener('wheel', () => { focusScrollGuard = null }, { passive: true })
+
+  // Grabbing the scrollbar moves focus off the content editable (WebKit makes
+  // scrollable regions click-focusable), which primes the focus-restore
+  // misbehaviour on the next click — jump to the old caret, or a stolen
+  // shift-click extension. Hand focus back to the content when the scrollbar
+  // interaction ends, with the guard armed to eat the restore's reveal scroll.
+  const editorRoot = editorView.value.dom
+  const editorContent = editorView.value.contentDOM
+  editorRoot.addEventListener('focusin', (event) => {
+    const target = event.target as Node
+    if (target === editorContent || editorContent.contains(target)) return
+    detachRefocus?.()
+    const refocusContent = () => {
+      window.removeEventListener('mouseup', refocusContent)
+      detachRefocus = null
+      focusScrollGuard = { scrollTop: guardedScroller.scrollTop, until: performance.now() + FOCUS_SCROLL_GUARD_MS }
+      editorContent.focus({ preventScroll: true })
+    }
+    window.addEventListener('mouseup', refocusContent)
+    detachRefocus = () => window.removeEventListener('mouseup', refocusContent)
+  })
 })
 
 // Sync external changes to editor
@@ -381,6 +603,8 @@ watch(() => props.errorLines, (newErrorLines) => {
 // Cleanup on unmount
 onUnmounted(() => {
   detachBlinkFreeze?.()
+  detachRefocus?.()
+  if (onEditorScroll) editorView.value?.scrollDOM.removeEventListener('scroll', onEditorScroll)
   editorView.value?.destroy()
 })
 </script>
@@ -390,7 +614,7 @@ onUnmounted(() => {
     <div class="px-3 h-11 flex items-center bg-gray-50 border-b border-gray-200">
       <slot name="header" />
     </div>
-    <div class="relative flex-1 overflow-hidden flex flex-col">
+    <div class="relative flex-1 overflow-hidden flex flex-col" @mouseenter="isHovered = true" @mouseleave="isHovered = false">
       <div ref="editorContainer" class="flex-1 overflow-hidden"></div>
       <div v-if="searchOpen" class="tab-search" @keydown.esc.stop.prevent="closeSearch">
         <div class="tab-search-field">
@@ -431,6 +655,18 @@ onUnmounted(() => {
 
 .cm-editor .cm-line.cm-errorLine {
   background-color: #fef2f2;
+}
+
+/* Search-match scrollbar rail: fixed to the editor's right edge (not the OS
+   scrollbar track), so it stays visible under macOS overlay scrollbars,
+   which only render during an active scroll gesture. */
+.cm-searchRail {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  width: 7px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .tab-search {

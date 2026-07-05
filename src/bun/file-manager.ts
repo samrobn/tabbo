@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { Utils } from "electrobun/bun";
 import type { FileInfo, SaveResult, PdfExportResult } from "../shared/rpc-types";
 import { exportPdfToDir } from "./pdf-export";
+import { toErrorMessage } from "./error-utils";
 
 function getProjectDir(): string {
 	const dir = join(Utils.paths.documents, "Tabbo");
@@ -30,12 +31,20 @@ export async function openTabFile(): Promise<FileInfo | null> {
 	if (!paths || paths.length === 0) return null;
 
 	const filePath = paths[0];
-	const content = await Bun.file(filePath).text();
-	return {
-		content,
-		filename: basename(filePath),
-		path: filePath,
-	};
+	// Unlike readTabFile (silent-null on failure — used for reload/revert where
+	// a missing file is an expected, quiet no-op), this is the user's explicit
+	// "open" action: a read failure (e.g. macOS TCC EPERM on iCloud-Drive paths)
+	// must reach the user with the underlying reason, not disappear.
+	try {
+		const content = await Bun.file(filePath).text();
+		return {
+			content,
+			filename: basename(filePath),
+			path: filePath,
+		};
+	} catch (err) {
+		throw new Error(`Could not open "${basename(filePath)}": ${toErrorMessage(err)}`);
+	}
 }
 
 export async function saveTabFile(

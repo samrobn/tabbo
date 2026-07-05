@@ -1,4 +1,4 @@
-import { describe, expect, test, afterEach } from "bun:test";
+import { describe, expect, test, beforeAll, afterEach } from "bun:test";
 import { unlinkSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -8,6 +8,15 @@ import { derivePdfFilename } from "./filename-utils";
 
 // Integration tests - require real tab binary and gs on PATH.
 // These exercise the full pipeline: tab → PostScript → Ghostscript → PDF → base64.
+
+// The binary is a build artefact — fresh worktrees/clones lack it, and without
+// this guard the suite fails as dozens of opaque sub-millisecond errors.
+beforeAll(() => {
+	const tabBinary = join(import.meta.dir, "../../engine/tab");
+	if (!existsSync(tabBinary)) {
+		throw new Error(`engine/tab not built — run: cd engine && make (expected at ${tabBinary})`);
+	}
+});
 
 const MINIMAL_TAB = "b\n1-abc\ne\n";
 

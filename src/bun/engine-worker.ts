@@ -4,6 +4,7 @@ import type { CompilationError, GetLayoutResponse, LayoutResult } from "../share
 import { toErrorMessage } from "./error-utils";
 
 const WORKER_TIMEOUT_MS = 5_000;
+const VERSION_PROBE_TIMEOUT_MS = 2_000;
 const EXPECTED_SCHEMA_VERSION = 1;
 
 // Respawn guard: track timestamps of recent spawns to detect a crash loop.
@@ -204,7 +205,7 @@ export class EngineWorker {
 			new Promise<never>((_, reject) =>
 				setTimeout(
 					() => reject(new Error("Version probe timed out.")),
-					2_000,
+					VERSION_PROBE_TIMEOUT_MS,
 				),
 			),
 		]);

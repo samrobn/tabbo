@@ -1,9 +1,20 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test, beforeAll, beforeEach, afterEach } from "bun:test";
+import { existsSync } from "fs";
+import { join } from "path";
 import { EngineWorker } from "./engine-worker";
 import type { LayoutResult } from "../shared/rpc-types";
 
 // Integration tests — require the real `tab` binary and fonts.
 // Each test gets a fresh EngineWorker instance; teardown kills it after.
+
+// The binary is a build artefact — fresh worktrees/clones lack it, and without
+// this guard the suite fails as dozens of opaque sub-millisecond errors.
+beforeAll(() => {
+	const tabBinary = join(import.meta.dir, "../../engine/tab");
+	if (!existsSync(tabBinary)) {
+		throw new Error(`engine/tab not built — run: cd engine && make (expected at ${tabBinary})`);
+	}
+});
 
 const SIMPLE_TAB = "b\n1-abc dDo\n2-efg hG\n3-abc dDo\n4-efg hG\n#2iI  lmn\nx-p H  j\nb\nY- k j \ne\n";
 const INVALID_TAB = "this is not valid tablature\n";

@@ -9,7 +9,6 @@
 /* proceedures */
 
 #include "print.h"
-#include "dviprint.h"
 
 void args_from_string(char *buf, struct file_info *f);
 int more();
@@ -73,9 +72,6 @@ double print_special_char(char **pp, print *p, i_buf *i_b,
 			  font_list *f_a[], int font,  struct file_info *f, int italic );
 struct font_list *add_font(char *name, double scale);
 char * ps_map(char * name);
-
-void do_ascii(struct list *l, struct file_info *f, i_buf *i_b);
-void do_nmidi(struct list *l, struct file_info *f, i_buf *i_b);
 
 extern double st_text;
 extern double m_space;

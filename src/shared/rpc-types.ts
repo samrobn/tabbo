@@ -93,6 +93,19 @@ export interface LayoutSystem {
 	primitives: LayoutPrimitive[];
 }
 
+/**
+ * Maps an editor source line to where the system it starts is typeset, for
+ * scroll-syncing the editor and the preview. One entry per typeset system.
+ */
+export interface Anchor {
+	/** 1-based absolute line number in the input file where the system's music begins. */
+	line: number;
+	/** 1-based page number the system is typeset on. */
+	page: number;
+	/** Vertical position of the top of the system, DVI units, same coordinate space as primitives (top-left origin). */
+	y: number;
+}
+
 export interface LayoutPage {
 	page_num: number;
 	systems: LayoutSystem[];
@@ -109,6 +122,8 @@ export interface LayoutResult {
 	staff_len_dvi: number;
 	fonts: FontDescriptor[];
 	pages: LayoutPage[];
+	// Optional: absent from older workers/goldens that predate this field.
+	anchors?: Anchor[];
 	errors: CompilationError[];
 }
 

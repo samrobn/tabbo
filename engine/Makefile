@@ -65,34 +65,28 @@ VPATH = src:src/input:src/output:src/layout:src/fonts:src/core
 CXXFLAGS = ${OPTIM} -DTFM_PATH=${TLOC} -Iinclude
 #
 
-OBJS = args.o buffer.o dbg.o draw.o dvi.o dvi_f.o dviprint.o \
+OBJS = args.o buffer.o dbg.o draw.o dvi.o dvi_f.o \
 	file_in.o get_t.o getsys.o i_buf.o incl.o main.o \
 	map.o notes.o pass1.o pass2.o pk_font.o pk_in.o \
 	print.o ps_print.o json_print.o score.o sizes.o tab_p.o tfm.o \
-	title.o tree.o uline.o sound.o beam.o raw_snd.o midi_snd.o \
-	pdf_print.o ascii.o nmidi.o do_nmidi.o worker.o
+	title.o tree.o uline.o beam.o worker.o
 
 
 SOURCES = main.cc file_in.cc tfm.cc dvi.cc buffer.cc i_buf.cc \
 	getsys.cc get_t.cc args.cc incl.cc print.cc tab_p.cc sizes.cc \
 	title.cc draw.cc pass1.cc pass2.cc dvi_f.cc map.cc notes.cc \
-	dviprint.cc score.cc uline.cc ps_print.cc json_print.cc \
-	pk_in.cc pk_font.cc dbg.cc tree.cc sound.cc beam.cc raw_snd.cc \
-	midi_snd.cc pdf_print.cc ascii.cc nmidi.cc do_nmidi.cc worker.cc
+	score.cc uline.cc ps_print.cc json_print.cc \
+	pk_in.cc pk_font.cc dbg.cc tree.cc beam.cc worker.cc
 
 
 HEADERS = buffer.h dbg.h file_in.h print.h system.h tfm.h pkfile.h\
-	dvi.h i_buf.h sizes.h tab.h dviprint.h ps.h pk_bit.h pk_input.h \
-	ps_print.h mac.h tree.h sound.h beam.h version.h raw_snd.h \
-	midi_snd.h pdf_print.h pdf.h ascii.h nmidi.h win.h
+	dvi.h i_buf.h sizes.h tab.h ps.h pk_bit.h pk_input.h \
+	ps_print.h mac.h tree.h beam.h version.h win.h
 
 all:	tab
 
 
-tt:	tree.o tt.o dbg.o
-	$(LD)  $(LDFLAGS) -o tt tree.o tt.o dbg.o
-
-tab:	${OBJS} 
+tab:	${OBJS}
 	$(LD)  $(LDFLAGS) -o tab ${OBJS} -lm
 
 clean:

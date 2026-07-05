@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-07-05
+
+### Added
+
+- Scroll sync: the editor and preview follow each other as you scroll, tracking the line under the cursor even in long pieces. Toggle it with the paired-arrows button next to the zoom controls.
+- Search matches are marked in the editor scrollbar so you can see where they fall in the document.
+- Tabbo now checks for updates periodically while it stays open, not just at launch.
+
+### Changed
+
+- Preview zoom reworked: the controls float over the preview and appear on hover, and the zoom level now means "size relative to the pane" — it stays sensible when you resize the window or drag the split.
+
+### Fixed
+
+- Clicking in the editor after dragging its scrollbar no longer jumps the view or selects text unexpectedly.
+- Accented and non-Latin text in titles and lyrics renders correctly in the live preview.
+- Ties in the live preview sit at the correct position, matching the PDF output.
+- Opening a file that can't be read now shows an error instead of failing silently.
+
 ## [0.1.0-alpha.6] - 2026-06-30
 
 ### Added

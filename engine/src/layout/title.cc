@@ -38,7 +38,6 @@ double gap=0.0;
 
 /* LOCAL */
 
-void get_misc(int flag, dvi_print *p, i_buf *i_b);
 void format_title(print *p, i_buf *i_b, font_list *f_a[], struct file_info *f);
 
 double special(char **pp, print *p, i_buf *i_b, font_list *f_a[], int font, int print,
@@ -59,8 +58,6 @@ format_title(print *p, i_buf *i_b, font_list *f_a[], struct file_info *f)
     char bbuf[LLINE];
     char *b_bp=&bbuf[0];
     int italic = 1;		/* for wallace titles */
-    static char *tp;			// title pointer
-    static char title_done=0;		// this seems to be for midi titles
     double font_scale = f->font_sizes[font]/12.0;  // wbc apr 17
     // July 19 2020 wbc
     // was 12.0 should be titlesize title is font 2
@@ -80,21 +77,6 @@ format_title(print *p, i_buf *i_b, font_list *f_a[], struct file_info *f)
     p->push();
 
     while ((*b_bp = i_b->GetByte()) != (char)EOF) { /* get the text */
-      if (f->m_flags & NMIDI & ! title_done) {
-	if (*b_bp == '}') {
-	  p->pop();
-	  *tp++ = 0;
-	  title_done = 1;
-	  return;
-	}
-	if (! f->title) {
-	  f->title = (char *)malloc(LLINE);
-	  tp = f->title;
-	}
-	*tp++ = *b_bp;
-	//	printf("%c", *b_bp);
-      }
-      else {
 	//  printf ("title: %c %2d\n", *b_bp, *b_bp);
 	//	if (f_a[0]->fnt->is_defined(*b_bp))
 	//		printf(" char %d is defined\n", *b_bp);
@@ -204,7 +186,6 @@ format_title(print *p, i_buf *i_b, font_list *f_a[], struct file_info *f)
 	  }
 	}
 	b_bp++;
-      }
       //            printf("title cur %f\n", cur);
     }
   done:

@@ -8,7 +8,6 @@
 #include "sizes.h"
 #include "tfm.h"
 #include "print.h"
-#include "dviprint.h"
 
 extern char flag_indent[];
 extern char i_flag_indent[];
