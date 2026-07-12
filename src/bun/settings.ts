@@ -6,7 +6,7 @@ import type { Settings } from "../shared/rpc-types";
 const SETTINGS_FILENAME = "settings.json";
 
 const DEFAULT_SETTINGS: Settings = {
-	fontSize: 14,
+	fontSize: 12,
 	theme: "light",
 	lastOpenedFile: null,
 	recentSaveDirs: [],

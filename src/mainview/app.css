@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./theme.css";
 
 /*
  * Tab font families — WOFF2 glyphs from engine/fonts/woff2/.
@@ -28,6 +29,66 @@
     font-style: normal;
 }
 
+/* Map tokens to Tailwind utilities; values live in theme.css (single source). */
+@theme inline {
+  --color-app: var(--color-app);
+  --color-pane: var(--color-pane);
+  --color-head: var(--color-head);
+  --color-raise: var(--color-raise);
+  --color-hairline: var(--color-hairline);
+  --color-line-active: var(--color-line-active);
+  --color-error-surface: var(--color-error-surface);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-ink-faint: var(--color-ink-faint);
+  --color-error-ink: var(--color-error-ink);
+  --color-accent: var(--color-accent);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-error-soft: var(--color-error-soft);
+  --color-gold: var(--color-gold);
+  --color-gold-soft: var(--color-gold-soft);
+  --font-sans: var(--font-ui);
+  --font-weight-medium: var(--weight-strong);
+  --font-weight-semibold: var(--weight-strong);
+}
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/ui-fonts/BricolageGrotesque-Variable.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Martian Mono";
+  src: url("/ui-fonts/MartianMono-StdxLt.woff2") format("woff2");
+  font-weight: 200;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Martian Mono";
+  src: url("/ui-fonts/MartianMono-StdLt.woff2") format("woff2");
+  font-weight: 300;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Martian Mono";
+  src: url("/ui-fonts/MartianMono-StdRg.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Martian Mono";
+  src: url("/ui-fonts/MartianMono-StdBd.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Martian Mono";
+  src: url("/ui-fonts/MartianMono-StdMd.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -35,9 +96,11 @@
 body {
 	margin: 0;
 	padding: 0;
-	font-family:
-		-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
-		Cantarell, sans-serif;
+	font-family: var(--font-ui);
+	font-weight: var(--weight-mark);
+	letter-spacing: var(--tracking-body);
+	background: var(--color-app);
+	color: var(--color-ink);
 }
 
 #app {

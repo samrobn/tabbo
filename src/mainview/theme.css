@@ -1,0 +1,67 @@
+/*
+ * Tabbo design tokens — single source of truth for colour and core type.
+ *
+ * Structure: paints (what a colour IS) -> roles (what a colour is FOR).
+ * Roles point at paints, so re-aiming a role (e.g. accent back to gold)
+ * is a one-line change.
+ *
+ * Consumed twice:
+ *  - app.css imports it and maps tokens to Tailwind utilities (@theme inline)
+ *  - docs/design-system.html links it raw, no build, to render the live system
+ */
+:root {
+  color-scheme: dark;
+
+  /* paints — warm */
+  --paint-coral: #e0906a;
+  --paint-coral-soft: #eaa584;
+  --paint-red: #d6695c;
+  --paint-gold: #c9a568;      /* parked: previous accent, kept as an option */
+  --paint-gold-soft: #d7b57e; /* parked */
+
+  /* paints — cool */
+  --paint-mauve: #a996d6;
+  --paint-teal: #7fc2ab;
+
+  /* surfaces */
+  --color-app: #13151a;
+  --color-pane: #181b21;
+  --color-head: #1c2027;
+  --color-raise: #242832;
+  --color-hairline: #282c34;
+  --color-line-active: #1f232c;
+  --color-error-surface: #221a1b;
+
+  /* ink scale */
+  --color-ink: #cecdc8;
+  --color-ink-soft: #83868d;
+  --color-ink-faint: #4a4d55;
+  --color-error-ink: #f0c9c2;
+
+  /* roles */
+  --color-accent: var(--paint-coral);
+  --color-accent-soft: var(--paint-coral-soft);
+  --color-error-soft: var(--paint-red);
+  --color-gold: var(--paint-gold);
+  --color-gold-soft: var(--paint-gold-soft);
+  --syn-directive: var(--paint-mauve);
+  --syn-title: var(--paint-red);
+  --syn-flag: var(--paint-coral);
+  --syn-value: var(--paint-teal);
+  --syn-comment: var(--color-ink-soft);
+
+  /* derived fills */
+  --color-selection: rgba(224, 144, 106, 0.25);
+  --color-accent-dim: rgba(224, 144, 106, 0.13);
+  --color-error-dim: rgba(214, 105, 92, 0.12);
+
+  /* type */
+  --font-ui: "Martian Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --editor-font: var(--font-ui);
+  --weight-base: 200;
+  --weight-mark: 300;
+  --weight-strong: 400;
+  --tracking-body: 0.02em;
+  --numeral-size: 9.5px;
+  --numeral-tracking: 0.1em;
+}

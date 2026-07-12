@@ -29,6 +29,24 @@ const outputPdf = join(tempDir, "test.pdf");
 await Bun.write(inputFile, "b\n1-abc\ne\n");
 
 try {
+	// Code signing for extra binaries — BEFORE the smoke tests, so they
+	// exercise the hardened-runtime-signed binaries that actually ship
+	// (notarisation proves a signature exists, not that the binary runs).
+	// Electrobun's codesign only auto-signs Mach-O in Contents/MacOS/ and
+	// .node files in Resources/app/bun/. Our binaries in resources/bin/
+	// need manual signing. postBuild runs before codesign (CLI line 2880 vs 3142).
+	const developerId = process.env.ELECTROBUN_DEVELOPER_ID;
+	if (developerId) {
+		const binaries = [tabBinary, gsBinary].filter(existsSync);
+		for (const binary of binaries) {
+			console.log(`postBuild: signing ${binary}`);
+			execSync(
+				`codesign --force --timestamp --sign "${developerId}" --options runtime "${binary}"`,
+			);
+		}
+		console.log(`postBuild: signed ${binaries.length} extra binaries`);
+	}
+
 	// Smoke test: tab binary
 	const tabProc = Bun.spawnSync(
 		[tabBinary, "-no-includes", "-o", outputPs, inputFile],
@@ -84,22 +102,6 @@ try {
 		console.log("postBuild: gs smoke test passed");
 	} else {
 		console.log("postBuild: gs binary not found, skipping gs smoke test");
-	}
-
-	// Code signing for extra binaries.
-	// Electrobun's codesign only auto-signs Mach-O in Contents/MacOS/ and
-	// .node files in Resources/app/bun/. Our binaries in resources/bin/
-	// need manual signing. postBuild runs before codesign (CLI line 2880 vs 3142).
-	const developerId = process.env.ELECTROBUN_DEVELOPER_ID;
-	if (developerId) {
-		const binaries = [tabBinary, gsBinary].filter(existsSync);
-		for (const binary of binaries) {
-			console.log(`postBuild: signing ${binary}`);
-			execSync(
-				`codesign --force --timestamp --sign "${developerId}" --options runtime "${binary}"`,
-			);
-		}
-		console.log(`postBuild: signed ${binaries.length} extra binaries`);
 	}
 } finally {
 	rmSync(tempDir, { recursive: true, force: true });
