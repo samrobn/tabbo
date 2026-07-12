@@ -67,32 +67,32 @@ watch(
       />
 
       <div
-        class="relative bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+        class="relative bg-raise border border-hairline text-ink rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
         @click.stop
       >
         <!-- available -->
         <template v-if="status.phase === 'available'">
-          <h2 class="text-base font-semibold text-gray-800 mb-1">
+          <h2 class="text-base font-semibold text-ink mb-1">
             Update available
-            <span v-if="trackedVersion" class="font-normal text-gray-500">— v{{ trackedVersion }}</span>
+            <span v-if="trackedVersion" class="font-normal text-ink-soft">— v{{ trackedVersion }}</span>
           </h2>
-          <p class="text-sm text-gray-600 mb-4">A new version of Tabbo is ready to download.</p>
+          <p class="text-sm text-ink-soft mb-4">A new version of Tabbo is ready to download.</p>
 
           <template v-if="changelog">
-            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">What's new</p>
-            <pre class="whitespace-pre-wrap text-sm font-mono bg-gray-50 border border-gray-200 rounded p-3 mb-5 max-h-48 overflow-y-auto">{{ changelog }}</pre>
+            <p class="text-xs font-medium text-ink-soft uppercase tracking-wide mb-1">What's new</p>
+            <pre class="whitespace-pre-wrap text-sm font-mono bg-head text-ink border border-hairline rounded p-3 mb-5 max-h-48 overflow-y-auto">{{ changelog }}</pre>
           </template>
 
           <div class="flex justify-end gap-3">
             <button
               @click="emit('snooze')"
-              class="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+              class="px-3 py-1.5 text-sm font-medium border border-hairline text-ink-soft hover:bg-hairline rounded transition-colors"
             >
               Remind me later
             </button>
             <button
               @click="emit('download')"
-              class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+              class="px-3 py-1.5 text-sm font-semibold text-[#141414] bg-accent hover:bg-accent-soft rounded transition-colors"
             >
               Install now
             </button>
@@ -101,41 +101,41 @@ watch(
 
         <!-- downloading -->
         <template v-else-if="status.phase === 'downloading'">
-          <h2 class="text-base font-semibold text-gray-800 mb-1">Downloading update…</h2>
-          <p class="text-sm text-gray-600 mb-4">
+          <h2 class="text-base font-semibold text-ink mb-1">Downloading update…</h2>
+          <p class="text-sm text-ink-soft mb-4">
             <template v-if="trackedVersion">Downloading v{{ trackedVersion }}.</template>
             <template v-else>Download in progress.</template>
             Please keep Tabbo open.
           </p>
-          <div class="w-full bg-gray-200 rounded-full h-2 mb-5">
+          <div class="w-full bg-head rounded-full h-2 mb-5">
             <div
-              class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              class="bg-accent h-2 rounded-full transition-all duration-300"
               :style="{
                 width: status.progress != null ? `${Math.round(status.progress)}%` : '100%',
               }"
               :class="{ 'animate-pulse': status.progress == null }"
             />
           </div>
-          <p class="text-xs text-gray-500 text-right">
+          <p class="text-xs text-ink-soft text-right">
             {{ status.progress != null ? `${Math.round(status.progress)}%` : 'Preparing…' }}
           </p>
         </template>
 
         <!-- ready -->
         <template v-else-if="status.phase === 'ready'">
-          <h2 class="text-base font-semibold text-gray-800 mb-1">
+          <h2 class="text-base font-semibold text-ink mb-1">
             Update ready
-            <span v-if="trackedVersion" class="font-normal text-gray-500">— v{{ trackedVersion }}</span>
+            <span v-if="trackedVersion" class="font-normal text-ink-soft">— v{{ trackedVersion }}</span>
           </h2>
-          <p class="text-sm text-gray-600 mb-5">
+          <p class="text-sm text-ink-soft mb-5">
             The update has been downloaded. Tabbo will restart to apply it.
           </p>
           <div class="flex justify-end">
             <button
               @click="emit('apply')"
               :disabled="isApplying"
-              class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              :class="{ 'hover:bg-blue-700': !isApplying }"
+              class="px-3 py-1.5 text-sm font-semibold text-[#141414] bg-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              :class="{ 'hover:bg-accent-soft': !isApplying }"
             >
               {{ isApplying ? 'Restarting Tabbo…' : 'Restart now' }}
             </button>
@@ -144,12 +144,12 @@ watch(
 
         <!-- error -->
         <template v-else-if="status.phase === 'error'">
-          <h2 class="text-base font-semibold text-gray-800 mb-1">Update failed</h2>
-          <p class="text-sm text-gray-600 mb-5">{{ status.message }}</p>
+          <h2 class="text-base font-semibold text-error-soft mb-1">Update failed</h2>
+          <p class="text-sm text-ink-soft mb-5">{{ status.message }}</p>
           <div class="flex justify-end">
             <button
               @click="emit('dismissError')"
-              class="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+              class="px-3 py-1.5 text-sm font-medium border border-hairline text-ink-soft hover:bg-hairline rounded transition-colors"
             >
               Dismiss
             </button>

@@ -34,6 +34,8 @@ export default {
 			"dist/fonts": "views/mainview/fonts",
 			// Body-text WOFF2 (TabboBody → Tinos), served as /body-fonts/Tinos-Regular.woff2 by the webview
 			"dist/body-fonts": "views/mainview/body-fonts",
+			// UI theme fonts (Bricolage Grotesque, Martian Mono), served as /ui-fonts/*.woff2 by the webview
+			"dist/ui-fonts": "views/mainview/ui-fonts",
 			// Font files for the tab typesetting engine (84 files, 3.3M)
 			"engine/fonts": "resources/fonts",
 			// Body-text font for Skia rasteriser — separate from engine/fonts (lute glyphs only).
@@ -52,6 +54,26 @@ export default {
 		watchIgnore: ["dist/**"],
 		mac: {
 			bundleCEF: false,
+			// Explicit even though it matches Electrobun's default - scripts/build-iconset.ts
+			// regenerates this dir from assets/icon/icon.svg.
+			icons: "icon.iconset",
+			// Sign/notarise only when credentials are present: Electrobun hard-fails
+			// (process.exit(1)) if the flags are on and the env vars are missing, so
+			// gating on env presence keeps credential-less local and smoke builds
+			// working unsigned. Dev builds never sign regardless (CLI-hardcoded).
+			// The notarize gate mirrors Electrobun's notarizeAndStaple exactly: it
+			// needs a FULL credential triple (API key or Apple ID route), not just
+			// one var — a subset would flip the flag on and still exit(1) in the CLI.
+			codesign: Boolean(process.env.ELECTROBUN_DEVELOPER_ID),
+			notarize: Boolean(
+				process.env.ELECTROBUN_DEVELOPER_ID &&
+					((process.env.ELECTROBUN_APPLEAPIISSUER &&
+						process.env.ELECTROBUN_APPLEAPIKEY &&
+						process.env.ELECTROBUN_APPLEAPIKEYPATH) ||
+						(process.env.ELECTROBUN_APPLEID &&
+							process.env.ELECTROBUN_APPLEIDPASS &&
+							process.env.ELECTROBUN_TEAMID)),
+			),
 		},
 		linux: {
 			bundleCEF: false,

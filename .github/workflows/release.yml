@@ -36,7 +36,79 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      # Signing/notarisation secrets live only where releases are published
+      # (samrobn/tabbo). With all six absent the steps below no-op, so this
+      # file stays byte-identical on both repos and the private-repo smoke
+      # build ships unsigned. A PARTIAL secret set is a misconfiguration that
+      # would either hard-fail deep inside the build (identity without cert,
+      # notarise flag without the full credential triple) or silently publish
+      # an unsigned release while the docs claim signing — so it fails fast
+      # here with the missing names instead.
+      - name: Validate signing secrets
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_DEVELOPER_ID: ${{ secrets.MACOS_DEVELOPER_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          missing=""
+          set_count=0
+          for name in MACOS_CERT_P12 MACOS_CERT_PASSWORD MACOS_DEVELOPER_ID APPLE_API_ISSUER APPLE_API_KEY_ID APPLE_API_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              missing="$missing $name"
+            else
+              set_count=$((set_count + 1))
+            fi
+          done
+          if [ "$set_count" -eq 0 ]; then
+            echo "No signing secrets configured; building unsigned"
+          elif [ -n "$missing" ]; then
+            echo "Partial signing configuration — set all six secrets or none. Missing:$missing"
+            exit 1
+          else
+            echo "All signing secrets present"
+          fi
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ]; then
+            echo "No signing certificate secret; building unsigned"
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$MACOS_CERT_P12" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+      - name: Write notarisation API key
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          if [ -z "$APPLE_API_KEY_P8" ]; then
+            echo "No notarisation key secret; skipping"
+            exit 0
+          fi
+          # Unlike cert.p12 above, the key file must outlive this step (notarytool
+          # reads it during the build); RUNNER_TEMP is wiped when the job ends.
+          printf '%s' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/notary-key.p8"
+          echo "ELECTROBUN_APPLEAPIKEYPATH=$RUNNER_TEMP/notary-key.p8" >> "$GITHUB_ENV"
+
       - name: Build stable app
+        env:
+          ELECTROBUN_DEVELOPER_ID: ${{ secrets.MACOS_DEVELOPER_ID }}
+          ELECTROBUN_APPLEAPIISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          ELECTROBUN_APPLEAPIKEY: ${{ secrets.APPLE_API_KEY_ID }}
         run: bun run build:stable
 
       - name: List artefacts

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Master app icon. Artwork is the locked ic-b10 symbol from
+    para/projects/tabbo/mockups/icon-options.html, extracted verbatim (squircle
+    + eleven pill rects), with its inkGrad gradient inlined.
+
+    The symbol's 480x480 squircle (inset 16 in the 512 viewBox) is centred in
+    that viewBox, so scaling+translating the whole group by the squircle's
+    target size keeps it centred on the 1024 canvas for free. Squircle target
+    is 824x824 (macOS icon grid, ~10% transparent margin each side):
+      scale     = 824 / 480       = 1.716667
+      translate = 512 - 256*scale = 72.533333
+    Regenerate PNGs/iconset from this file via scripts/build-iconset.ts - never
+    hand-edit the rasters.
+  -->
+  <defs>
+    <linearGradient id="inkGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1e24"/>
+      <stop offset="1" stop-color="#101216"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(72.533333 72.533333) scale(1.716667)">
+    <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#inkGrad)"/>
+    <rect x="120" y="89" width="72" height="34" rx="17" fill="#4a4d55"/>
+    <rect x="204" y="89" width="84" height="34" rx="17" fill="#e0906a"/>
+    <rect x="300" y="89" width="44" height="34" rx="17" fill="#e0906a"/>
+    <rect x="188" y="149" width="58" height="34" rx="17" fill="#7fb8a4"/>
+    <rect x="188" y="209" width="58" height="34" rx="17" fill="#9d8cc9"/>
+    <rect x="188" y="269" width="92" height="34" rx="17" fill="#eeb45e"/>
+    <rect x="292" y="269" width="40" height="34" rx="17" fill="#e6e4de"/>
+    <rect x="188" y="329" width="100" height="34" rx="17" fill="#9d8cc9"/>
+    <rect x="300" y="329" width="64" height="34" rx="17" fill="#7fb8a4"/>
+    <rect x="188" y="389" width="68" height="34" rx="17" fill="#e6e4de"/>
+    <rect x="268" y="389" width="48" height="34" rx="17" fill="#9d8cc9"/>
+  </g>
+</svg>

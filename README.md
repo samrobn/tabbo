@@ -10,15 +10,6 @@ An early alpha — expect rough edges. The [latest release](https://github.com/s
 
 1. Download `stable-macos-arm64-Tabbo.dmg` from the [latest release](https://github.com/samrobn/tabbo/releases/latest).
 2. Open the `.dmg` and drag Tabbo to Applications.
-3. First launch: macOS will say *"Tabbo is damaged and can't be opened"*. The app isn't damaged — Gatekeeper is blocking it because this alpha isn't signed yet. Open **Terminal** (Applications → Utilities) and run:
-
-   ```
-   xattr -dr com.apple.quarantine /Applications/Tabbo.app
-   ```
-
-   Then double-click Tabbo as normal. Only needed once.
-
-   *Alternative GUI route (unreliable on recent macOS, try the Terminal command first):* dismiss the warning, open **System Settings → Privacy & Security**, scroll to the bottom, and click **Open Anyway** next to Tabbo.
 
 Future updates land in-app: the update modal appears when a new release is available, downloads in the background, and restarts to apply.
 

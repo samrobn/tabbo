@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { pageDisplayWidthPx, stepZoom } from "./zoom";
 
-// Container width chosen so fit width (containerWidth - 32) comes out to a
-// round number, keeping percentage arithmetic exact in the tests below.
-const CONTAINER_WIDTH = 532; // fit width = 500
+// containerWidth is the padding-free content width (TabPreview subtracts
+// computed padding at measurement), so 100% = containerWidth exactly.
+const CONTAINER_WIDTH = 500;
 
 describe("pageDisplayWidthPx", () => {
-  test("100% fills the panel's fit width exactly", () => {
-    expect(pageDisplayWidthPx(100, 532)).toBe(500);
-    expect(pageDisplayWidthPx(100, 1232)).toBe(1200);
+  test("100% fills the content width exactly", () => {
+    expect(pageDisplayWidthPx(100, 500)).toBe(500);
+    expect(pageDisplayWidthPx(100, 1200)).toBe(1200);
   });
 
   test("scales linearly with percent at a fixed container width", () => {
@@ -17,10 +17,10 @@ describe("pageDisplayWidthPx", () => {
   });
 
   test("sticky/panel-relative: at a fixed percent, rendered width scales linearly with the container as it resizes", () => {
-    // 50% stays half the panel's fit width no matter how the panel resizes
-    expect(pageDisplayWidthPx(50, 532)).toBe(250); // fit width 500 -> 250
-    expect(pageDisplayWidthPx(50, 1032)).toBe(500); // fit width 1000 -> 500
-    expect(pageDisplayWidthPx(50, 232)).toBe(100); // fit width 200 -> 100
+    // 50% stays half the content width no matter how the panel resizes
+    expect(pageDisplayWidthPx(50, 500)).toBe(250);
+    expect(pageDisplayWidthPx(50, 1000)).toBe(500);
+    expect(pageDisplayWidthPx(50, 200)).toBe(100);
   });
 
   test("rounds to the nearest pixel", () => {
@@ -46,6 +46,6 @@ describe("stepZoom", () => {
 
   test("reset to 100 (the default) then fills the panel exactly", () => {
     const reset = 100;
-    expect(pageDisplayWidthPx(reset, 532)).toBe(500);
+    expect(pageDisplayWidthPx(reset, 500)).toBe(500);
   });
 });

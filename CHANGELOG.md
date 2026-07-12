@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.8] - 2026-07-12
+
+### Added
+
+- Bar ruler in the editor: each barline is numbered, with a subtle rule across the line and alternating shading per bar, so you can see the musical structure at a glance.
+- A live design-system reference page ships in the repo (`docs/design-system.html`).
+
+### Changed
+
+- Complete visual refresh: Tabbo now wears a dark "graphite" theme throughout — coral accent, redesigned syntax colours (mauve directives, teal values, red titles, coral rhythm flags), and Martian Mono across the editor and interface.
+- New app icon colouring to match (coral top line).
+- Document-title menu is wider and tidier, and shows folders as ~/ paths.
+- Preview polish: uniform spacing around and between pages, and a softer page shadow suited to the dark theme.
+- Scroll-sync toggle redesigned: hovering previews what clicking will do; the icon is quieter when sync is on.
+
+### Fixed
+
+- Pages now fit the preview width exactly instead of overlapping the right padding.
+- Save dialogs no longer overflow when the file path is long.
+
 ## [0.1.0-alpha.7] - 2026-07-05
 
 ### Added

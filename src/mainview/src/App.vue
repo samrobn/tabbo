@@ -184,7 +184,7 @@ const titleBaseDir = ref<string>('') // reactive: whereOptions keeps the open-ti
 const showTemplatePicker = ref<boolean>(false)
 const templatePickerRoot = ref<HTMLElement | null>(null)
 const showHelpPanel = ref<boolean>(false)
-const fontSize = ref<number>(14)
+const fontSize = ref<number>(12)
 const exportStatus = ref<{ success: boolean; message: string } | null>(null)
 const confirmModalOpen = ref<boolean>(false)
 const confirmModalMessage = ref<string>('')
@@ -667,6 +667,12 @@ async function chooseFolderClick(): Promise<void> {
 }
 
 // MINIMAL: Where shows absolute paths; home-relative (~) prettifying needs the home dir from bun, deferred.
+// Display-only: collapse the home dir to ~ in the Where menu (macOS-only app,
+// so the /Users/<name> prefix is reliable). Option values stay full paths.
+function tildify(path: string): string {
+  return path.replace(/^\/Users\/[^/]+(?=\/|$)/, '~')
+}
+
 const whereOptions = computed(() => {
   const opts: string[] = []
   // Effective (open-time) folder is always offered, even after the user picks another.
@@ -852,7 +858,7 @@ onMounted(async () => {
 
   // Load persisted settings - captured here and threaded into restoreSession
   // so getSettings is only called once.
-  let settings: Settings = { fontSize: 14, theme: 'light' as const, lastOpenedFile: null, recentSaveDirs: [] }
+  let settings: Settings = { fontSize: 12, theme: 'light' as const, lastOpenedFile: null, recentSaveDirs: [] }
   try {
     settings = await electrobun.rpc!.request.getSettings({})
     fontSize.value = settings.fontSize
@@ -910,17 +916,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-gray-100">
+  <div class="h-screen flex flex-col bg-app">
     <!-- Mobile tab navigation -->
-    <div class="md:hidden bg-white border-b border-gray-200">
+    <div class="md:hidden bg-head border-b border-hairline">
       <div class="flex">
         <button
           @click="activeTab = 'editor'"
           :class="[
             'flex-1 px-4 py-2 text-sm font-medium transition-colors',
             activeTab === 'editor'
-              ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
-              : 'text-gray-600 hover:text-gray-800'
+              ? 'bg-accent/10 text-accent border-b-2 border-accent'
+              : 'text-ink-soft hover:text-ink'
           ]"
         >
           Editor
@@ -930,8 +936,8 @@ onUnmounted(() => {
           :class="[
             'flex-1 px-4 py-2 text-sm font-medium transition-colors',
             activeTab === 'preview'
-              ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
-              : 'text-gray-600 hover:text-gray-800'
+              ? 'bg-accent/10 text-accent border-b-2 border-accent'
+              : 'text-ink-soft hover:text-ink'
           ]"
         >
           Preview
@@ -942,23 +948,23 @@ onUnmounted(() => {
     <main ref="splitContainer" class="flex-1 flex overflow-hidden relative">
       <div
         v-if="errors.length > 0"
-        class="absolute top-0 left-0 right-0 z-10 bg-red-50 border-b border-red-200 px-4 py-2 shadow-sm"
+        class="absolute top-0 left-0 right-0 z-10 bg-error-surface border border-error-soft/45 rounded-lg px-4 py-2 shadow-sm"
       >
-        <div v-for="(error, index) in errors" :key="index" class="text-red-700 text-sm">
-          <span v-if="error.line" class="font-mono text-red-600">Line {{ error.line }}: </span>{{ error.message }}
+        <div v-for="(error, index) in errors" :key="index" class="text-error-ink text-sm">
+          <span v-if="error.line" class="font-mono text-error-soft">Line {{ error.line }}: </span>{{ error.message }}
         </div>
       </div>
       <div
         v-if="exportStatus"
         class="absolute top-0 left-0 right-0 z-10 px-4 py-2 shadow-sm text-sm"
         :class="exportStatus.success
-          ? 'bg-green-50 border-b border-green-200 text-green-700'
-          : 'bg-red-50 border-b border-red-200 text-red-700'"
+          ? 'bg-raise border border-hairline text-ink'
+          : 'bg-error-surface border border-error-soft/45 text-error-ink'"
       >
         {{ exportStatus.message }}
       </div>
       <div
-        class="w-full md:w-[var(--editor-width)] md:shrink-0"
+        class="w-full md:w-[var(--editor-width)] md:shrink-0 bg-pane"
         :style="{ '--editor-width': editorWidthPct + '%' }"
         :class="activeTab === 'editor' ? 'block' : 'hidden md:block'"
       >
@@ -973,12 +979,12 @@ onUnmounted(() => {
             <div class="relative">
               <button
                 @click="openTitleMenu()"
-                class="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded transition-colors flex items-center gap-1"
+                class="px-3 py-1.5 text-sm font-medium text-ink hover:bg-raise rounded transition-colors flex items-center gap-1"
                 aria-label="Document name and location"
               >
                 <span>{{ currentFilename }}</span>
                 <Transition name="edited-fade">
-                  <span v-if="isDirty" class="text-xs text-gray-400 font-medium">Edited</span>
+                  <span v-if="isDirty" class="text-xs text-ink-faint font-medium">Edited</span>
                 </Transition>
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -1013,7 +1019,7 @@ onUnmounted(() => {
                       aria-label="Save folder"
                       @change="onWhereSelect"
                     >
-                      <option v-for="dir in whereOptions" :key="dir" :value="dir">{{ dir }}</option>
+                      <option v-for="dir in whereOptions" :key="dir" :value="dir">{{ tildify(dir) }}</option>
                     </select>
                     <button type="button" class="title-menu-choose" @click="chooseFolderClick">Choose…</button>
                   </div>
@@ -1025,7 +1031,7 @@ onUnmounted(() => {
       </div>
       <!-- Draggable divider (desktop only); mobile switches panes via the tab bar -->
       <div
-        class="hidden md:block shrink-0 w-1.5 bg-gray-300 hover:bg-blue-400 cursor-col-resize transition-colors"
+        class="hidden md:block shrink-0 w-px relative bg-hairline hover:bg-accent cursor-col-resize transition-colors before:content-[''] before:absolute before:inset-y-0 before:-inset-x-1"
         @pointerdown="startSplitDrag"
         @dblclick="resetSplit"
         title="Drag to resize · double-click to reset"
@@ -1033,7 +1039,7 @@ onUnmounted(() => {
         aria-orientation="vertical"
         aria-label="Resize editor and preview"
       />
-      <div class="w-full md:flex-1 md:min-w-0 bg-white" :class="activeTab === 'preview' ? 'block' : 'hidden md:block'">
+      <div class="w-full md:flex-1 md:min-w-0 bg-app" :class="activeTab === 'preview' ? 'block' : 'hidden md:block'">
         <TabPreview
           ref="previewRef"
           :layout="layoutResult"
@@ -1054,16 +1060,16 @@ onUnmounted(() => {
       @keydown.esc="showTemplatePicker = false"
     >
       <div class="absolute inset-0 bg-black/40" @click="showTemplatePicker = false" />
-      <div class="relative bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 overflow-hidden" @click.stop>
-        <div class="px-4 py-3 border-b border-gray-200 text-sm font-medium text-gray-700">New from Template</div>
+      <div class="relative bg-raise border border-hairline text-ink rounded-lg shadow-xl w-full max-w-sm mx-4 overflow-hidden" @click.stop>
+        <div class="px-4 py-3 border-b border-hairline text-sm font-medium text-ink">New from Template</div>
         <button
           v-for="example in examples"
           :key="example.name"
           @click="loadExample(example.name)"
-          class="w-full px-4 py-2 text-left hover:bg-gray-100"
+          class="w-full px-4 py-2.5 text-left hover:bg-hairline"
         >
-          <div class="font-medium text-gray-800 text-sm">{{ example.name }}</div>
-          <div class="text-xs text-gray-500">{{ example.description }}</div>
+          <div class="font-light text-ink text-sm mb-1">{{ example.name }}</div>
+          <div class="text-xs text-ink-soft font-extralight leading-relaxed">{{ example.description }}</div>
         </button>
       </div>
     </div>
@@ -1088,21 +1094,21 @@ onUnmounted(() => {
     >
       <div class="absolute inset-0 bg-black/40" @click="resolveConfirm(false)" />
       <div
-        class="relative bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4"
+        class="relative bg-raise border border-hairline text-ink rounded-lg shadow-xl p-6 max-w-sm w-full mx-4"
         @click.stop
       >
-        <p class="text-sm text-gray-700 mb-5">{{ confirmModalMessage }}</p>
+        <p class="text-sm text-ink mb-5 break-words">{{ confirmModalMessage }}</p>
         <div class="flex justify-end gap-3">
           <button
             @click="resolveConfirm(false)"
-            class="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+            class="px-3 py-1.5 text-sm font-medium border border-hairline text-ink-soft hover:bg-hairline rounded transition-colors"
           >
             Cancel
           </button>
           <button
             ref="confirmPrimaryBtn"
             @click="resolveConfirm(true)"
-            class="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
+            class="px-3 py-1.5 text-sm font-semibold bg-error-soft text-[#141414] hover:bg-error-soft/90 rounded transition-colors"
           >
             {{ confirmPrimaryLabel }}
           </button>
@@ -1118,27 +1124,27 @@ onUnmounted(() => {
     >
       <div class="absolute inset-0 bg-black/40" @click="resolveQuit('cancel')" />
       <div
-        class="relative bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4"
+        class="relative bg-raise border border-hairline text-ink rounded-lg shadow-xl p-6 max-w-sm w-full mx-4"
         @click.stop
       >
-        <p class="text-sm text-gray-700 mb-5">You have unsaved changes. Save before closing?</p>
+        <p class="text-sm text-ink mb-5">You have unsaved changes. Save before closing?</p>
         <div class="flex justify-end gap-3">
           <button
             @click="resolveQuit('cancel')"
-            class="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+            class="px-3 py-1.5 text-sm font-medium border border-hairline text-ink-soft hover:bg-hairline rounded transition-colors"
           >
             Cancel
           </button>
           <button
             @click="resolveQuit('discard')"
-            class="px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+            class="px-3 py-1.5 text-sm font-medium text-error-soft hover:bg-error-soft/10 rounded transition-colors"
           >
             Discard
           </button>
           <button
             ref="quitSaveBtn"
             @click="resolveQuit('save')"
-            class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+            class="px-3 py-1.5 text-sm font-semibold bg-accent text-[#141414] hover:bg-accent-soft rounded transition-colors"
           >
             Save
           </button>
@@ -1167,17 +1173,19 @@ body {
   left: 0;
   margin-top: 6px;
   z-index: 50;
-  width: 22rem;
-  background: #fff;
-  border-radius: 0.5rem;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+  width: 30rem;
+  max-width: calc(100vw - 24px);
+  background: var(--color-raise);
+  border: 1px solid var(--color-hairline);
+  border-radius: 0.625rem;
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.6);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 .title-menu-row { display: flex; align-items: center; gap: 0.5rem; }
-.title-menu-label { width: 3.5rem; font-size: 0.8rem; color: #6b7280; /* gray-500 */ }
+.title-menu-label { width: 3.5rem; font-size: 0.75rem; color: var(--color-ink-soft); }
 .title-menu-input {
   flex: 1;
   min-width: 0;
@@ -1185,12 +1193,14 @@ body {
   box-sizing: border-box;
   font-size: 0.875rem;
   padding: 4px 6px;
-  border: 1px solid #d1d5db; /* gray-300 */
-  border-radius: 4px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 6px;
   outline: none;
+  background: var(--color-head);
+  color: var(--color-ink);
 }
 .title-menu-input:focus,
-.title-menu-name-field:focus-within { border-color: #9ca3af; /* gray-400 */ }
+.title-menu-name-field:focus-within { border-color: var(--color-accent); }
 /* Name field: a borderless auto-sizing stem input with a fixed, muted ".tab" suffix hugging the text. */
 .title-menu-name-field { display: inline-flex; align-items: center; }
 .title-menu-stem {
@@ -1207,7 +1217,7 @@ body {
   background: transparent;
 }
 .title-menu-ext {
-  color: #9ca3af; /* gray-400 - muted, signals the extension is fixed/uneditable */
+  color: var(--color-ink-faint); /* was gray-400 - muted, signals the extension is fixed/uneditable */
   user-select: none;
   pointer-events: none;
   white-space: pre;
@@ -1217,15 +1227,15 @@ body {
   height: 1.875rem; /* match the select/name box height */
   box-sizing: border-box;
   padding: 0 0.6rem;
-  font-size: 0.8rem;
-  color: #374151; /* gray-700 */
-  background: #f3f4f6; /* gray-100 */
-  border: 1px solid #d1d5db; /* gray-300 */
-  border-radius: 4px;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  background: var(--color-head);
+  border: 1px solid var(--color-hairline);
+  border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
 }
-.title-menu-choose:hover { background: #e5e7eb; /* gray-200 */ }
+.title-menu-choose:hover { background: var(--color-hairline); }
 /* Edited marker: appears instantly on edit; on save it fades AND collapses its box, so the
    chevron slides smoothly to settle by the filename instead of snapping. The slide (max-width +
    negative margin to absorb the flex gap) starts just after the fade and finishes before it,

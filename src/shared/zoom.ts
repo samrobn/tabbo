@@ -14,13 +14,10 @@
 
 export type ZoomState = number;
 
-// Container padding subtracted before fitting the page to the panel width
-// (matches the `p-4` content-area padding in TabPreview.vue: 16px each side).
-const CONTAINER_PADDING_PX = 32;
-
+// containerWidth arrives padding-free: TabPreview measures clientWidth minus
+// computed padding, so 100% fills the content box exactly.
 export function pageDisplayWidthPx(zoom: ZoomState, containerWidth: number): number {
-	const fitWidth = containerWidth - CONTAINER_PADDING_PX;
-	return Math.round(fitWidth * (zoom / 100));
+	return Math.round(containerWidth * (zoom / 100));
 }
 
 // Step zoom by `step` in `direction`, clamped to [min, max].

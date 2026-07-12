@@ -33,6 +33,9 @@ const emit = defineEmits<{
 
 // Container ref for measuring width, passed down to the renderer
 const containerRef = ref<HTMLElement | null>(null)
+// After a sync-toggle click, keep showing the NEW state's idle arrows until the
+// pointer leaves — otherwise the hover-preview immediately shows the state just left.
+const syncJustToggled = ref(false)
 const containerWidth = ref(500)
 
 // Zoom state is a plain percentage, panel-relative and sticky: it means
@@ -108,7 +111,10 @@ defineExpose({ setScrollPosition })
 
 function updateContainerWidth() {
   if (containerRef.value) {
-    containerWidth.value = containerRef.value.clientWidth
+    // clientWidth includes padding; subtract it so fit-width pages respect it
+    const style = getComputedStyle(containerRef.value)
+    containerWidth.value =
+      containerRef.value.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
   }
 }
 
@@ -146,18 +152,18 @@ function resetZoom() {
   <div class="relative h-full group">
     <div
       ref="containerRef"
-      class="h-full p-4 overflow-auto"
+      class="h-full p-5 overflow-auto bg-app"
       @scroll="onContainerScroll"
       @mouseenter="isHovered = true"
       @mouseleave="isHovered = false"
     >
       <!-- Spinner: only when loading with no prior layout (first compile / empty state) -->
       <div v-if="isLoading && !layout" class="flex flex-col items-center justify-center h-full gap-4">
-        <svg class="animate-spin h-12 w-12 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg class="animate-spin h-12 w-12 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        <div class="text-gray-600 font-medium">{{ COMPILE_MESSAGES.COMPILING }}</div>
+        <div class="text-ink-soft">{{ COMPILE_MESSAGES.COMPILING }}</div>
       </div>
       <!-- Renderer: independent v-if so it stays mounted during recompiles -->
       <TabLayoutRenderer
@@ -167,7 +173,7 @@ function resetZoom() {
         :container-width="containerWidth"
       />
       <!-- Empty placeholder: no layout and not loading -->
-      <div v-if="!layout && !isLoading" class="flex items-center justify-center h-full text-gray-400">
+      <div v-if="!layout && !isLoading" class="flex items-center justify-center h-full text-ink-soft">
         {{ COMPILE_MESSAGES.EMPTY_PREVIEW }}
       </div>
     </div>
@@ -180,29 +186,30 @@ function resetZoom() {
          never move. -->
     <div
       v-if="layout"
-      class="absolute top-4 right-6 z-20 flex items-center gap-0.5 px-1 py-0.5 bg-white border border-gray-300 rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.12)] text-xs transition-opacity opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+      class="absolute top-4 right-6 z-20 flex items-center gap-0.5 px-1 py-0.5 bg-raise border border-hairline rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.12)] text-xs transition-opacity opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
     >
       <button
-        @click="emit('update:scrollSync', !scrollSync)"
+        @click="emit('update:scrollSync', !scrollSync); syncJustToggled = true"
+        @mouseleave="syncJustToggled = false"
         :aria-pressed="scrollSync"
-        class="p-1 rounded transition-colors text-gray-600 hover:bg-gray-100"
+        class="group/sync p-1 rounded transition-colors text-ink-soft hover:text-accent hover:bg-[var(--color-accent-dim)]"
         aria-label="Sync scrolling"
         title="Sync scrolling"
       >
-        <!-- Paired up-down arrows: both panes scroll together. When sync is
-             off the second arrow fades — the panes no longer move as one. -->
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 4v16m0-16L3 7m3-3l3 3M6 20l-3-3m3 3l3-3" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :class="scrollSync ? '' : 'opacity-30'" d="M18 4v16m0-16l-3 3m3-3l3 3M18 20l-3-3m3 3l3-3" />
+        <!-- Opposing arrows (mockup icon): both panes scroll together. When
+             sync is off the second arrow fades — the panes no longer move as one. -->
+        <svg class="w-3.5 h-3.5 rotate-90 transition-opacity" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 16 16">
+          <path d="M3 5h8M9 3l2 2-2 2" />
+          <path class="transition-opacity" :class="syncJustToggled ? (scrollSync ? '' : 'opacity-30') : (scrollSync ? 'group-hover/sync:opacity-30' : 'opacity-30 group-hover/sync:opacity-100')" d="M13 11H5M7 9l-2 2 2 2" />
         </svg>
       </button>
       <!-- Divider between the sync toggle and the zoom cluster. -->
-      <div class="w-px h-3 bg-gray-300 mx-0.5"></div>
+      <div class="w-px h-3 bg-hairline mx-0.5"></div>
       <!-- The label always shows the current zoom % and is itself the
            reset-to-100% control. -->
       <button
         @click="resetZoom"
-        class="min-w-[2.75rem] text-right px-1 text-gray-600 hover:bg-gray-100 rounded tabular-nums"
+        class="min-w-[2.75rem] text-right px-1 text-ink hover:bg-hairline rounded tabular-nums"
         aria-label="Reset to 100%"
         title="Reset to 100%"
       >
@@ -213,7 +220,7 @@ function resetZoom() {
         :disabled="!canZoomOut"
         :class="[
           'p-1 rounded transition-colors',
-          !canZoomOut ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'
+          !canZoomOut ? 'text-ink-faint cursor-not-allowed' : 'text-ink-soft hover:text-ink hover:bg-hairline'
         ]"
         aria-label="Zoom out"
         title="Zoom out"
@@ -227,7 +234,7 @@ function resetZoom() {
         :disabled="!canZoomIn"
         :class="[
           'p-1 rounded transition-colors',
-          !canZoomIn ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'
+          !canZoomIn ? 'text-ink-faint cursor-not-allowed' : 'text-ink-soft hover:text-ink hover:bg-hairline'
         ]"
         aria-label="Zoom in"
         title="Zoom in"

@@ -154,11 +154,11 @@ const renderedPages = computed(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 16px;
+  gap: 20px;
 }
 
 .tab-page {
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 18px 44px -16px rgba(0,0,0,0.85);
   background: white;
   /* Centre when narrower than the panel; auto margins collapse to 0 when wider,
      keeping the left edge reachable in the overflow-auto container. */

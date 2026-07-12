@@ -3,12 +3,25 @@ import { ref, computed, watch, onMounted, onUnmounted, shallowRef, nextTick } fr
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, drawSelection, Decoration, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { EditorState, Compartment, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 import { tab } from '../codemirror/tab-language'
+import { barRuler } from '../codemirror/bar-ruler'
 import { search, setSearchQuery, getSearchQuery, SearchQuery, findNext, findPrevious } from '@codemirror/search'
 import { currentMatchIndex, matchToSelect, type MatchRange } from '../../../shared/search-match'
 import { computeScrollbarMarkers, type MatchLine } from '../../../shared/scrollbar-markers'
 import { scrollFraction, scrollTopForFraction, clampScrollTop, type ScrollPosition } from '../../../shared/scroll-sync'
+
+const graphiteHighlight = HighlightStyle.define([
+  { tag: tags.keyword, color: 'var(--syn-directive)', fontWeight: 'var(--weight-mark)' },
+  { tag: tags.string, color: 'var(--syn-title)', fontWeight: 'var(--weight-mark)' },
+  { tag: tags.comment, color: 'var(--syn-comment)', fontStyle: 'italic' },
+  { tag: tags.number, color: 'var(--syn-flag)', fontWeight: 'var(--weight-mark)' },
+  { tag: tags.atom, color: 'var(--syn-value)', fontWeight: 'var(--weight-mark)' },
+  { tag: tags.className, color: 'var(--syn-value)', fontWeight: 'var(--weight-mark)' },
+  { tag: tags.variableName, color: 'var(--color-ink)' },
+  { tag: [tags.bracket, tags.operator, tags.meta, tags.punctuation], color: 'var(--color-ink-soft)' },
+])
 
 interface Props {
   modelValue: string
@@ -454,60 +467,56 @@ onMounted(() => {
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       languageConf.of(tab()),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      syntaxHighlighting(graphiteHighlight, { fallback: true }),
       errorLinesField,
+      barRuler(),
       search(),
       searchHighlighter,
       searchScrollbarRail,
       updateListener,
       EditorView.lineWrapping,
       fontSizeConf.of(fontSizeTheme(props.fontSize)),
-      EditorView.theme({
-        '&': {
-          height: '100%',
+      EditorView.theme(
+        {
+          '&': { height: '100%' },
+          '.cm-scroller': {
+            fontFamily: 'var(--editor-font)',
+            fontWeight: 'var(--weight-base)',
+            fontVariationSettings: "'wdth' 100",
+            letterSpacing: 'var(--tracking-body)',
+            lineHeight: '1.85',
+            overflow: 'auto',
+          },
+          '.cm-content': { padding: '12px 0' },
+          '.cm-line': { padding: '0 12px' },
+          '.cm-gutters': {
+            fontSize: 'var(--numeral-size)',
+            fontWeight: 'var(--weight-mark)',
+            letterSpacing: 'var(--numeral-tracking)',
+            backgroundColor: 'var(--color-pane)',
+            color: 'var(--color-ink-faint)',
+          },
+          '.cm-lineNumbers .cm-gutterElement': {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            paddingRight: '12px',
+          },
+          '.cm-activeLineGutter': { backgroundColor: 'var(--color-raise)' },
+          '.cm-activeLine': { backgroundColor: 'var(--color-line-active)' },
+          '.cm-cursor, .cm-dropCursor': { borderLeftWidth: '2px' },
+          '&.cm-focused .cm-cursor': { borderLeftColor: 'var(--color-accent)' },
+          // Stop the caret blink while the mouse button is held (see the
+          // mousedown handler). !important beats CM's inline animation-name.
+          '&.cm-mouse-down .cm-cursorLayer': { animationName: 'none !important' },
+          '&.cm-focused .cm-selectionBackground, ::selection': {
+            backgroundColor: 'var(--color-selection)',
+          },
+          '.cm-searchMatch': { backgroundColor: 'rgba(245, 158, 11, 0.30)' },
+          '.cm-searchMatch-selected': { backgroundColor: 'rgba(234, 88, 12, 0.55)' },
         },
-        '.cm-scroller': {
-          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-          overflow: 'auto',
-        },
-        '.cm-content': {
-          padding: '12px 0',
-        },
-        '.cm-line': {
-          padding: '0 12px',
-        },
-        '.cm-gutters': {
-          backgroundColor: '#f8f9fa',
-          borderRight: '1px solid #e5e7eb',
-          color: '#9ca3af',
-        },
-        '.cm-activeLineGutter': {
-          backgroundColor: '#e5e7eb',
-        },
-        '.cm-activeLine': {
-          backgroundColor: '#f3f4f6',
-        },
-        '.cm-cursor, .cm-dropCursor': {
-          borderLeftWidth: '2px',
-        },
-        '&.cm-focused .cm-cursor': {
-          borderLeftColor: '#3b82f6',
-        },
-        // Stop the caret blink while the mouse button is held (see the
-        // mousedown handler). !important beats CM's inline animation-name.
-        '&.cm-mouse-down .cm-cursorLayer': {
-          animationName: 'none !important',
-        },
-        '&.cm-focused .cm-selectionBackground, ::selection': {
-          backgroundColor: '#dbeafe',
-        },
-        '.cm-searchMatch': {
-          backgroundColor: '#fde68a',
-        },
-        '.cm-searchMatch-selected': {
-          backgroundColor: '#fb923c',
-        },
-      }),
+        { dark: true },
+      ),
     ],
   })
 
@@ -611,7 +620,7 @@ onUnmounted(() => {
 
 <template>
   <div class="h-full flex flex-col">
-    <div class="px-3 h-11 flex items-center bg-gray-50 border-b border-gray-200">
+    <div class="px-3 h-11 flex items-center bg-head border-b border-hairline">
       <slot name="header" />
     </div>
     <div class="relative flex-1 overflow-hidden flex flex-col" @mouseenter="isHovered = true" @mouseleave="isHovered = false">
@@ -649,12 +658,12 @@ onUnmounted(() => {
 
 /* Error line highlighting */
 .cm-errorLine {
-  background-color: #fef2f2 !important;
-  border-left: 3px solid #ef4444;
+  background-color: var(--color-error-dim) !important;
+  border-left: 3px solid var(--color-error-soft);
 }
 
 .cm-editor .cm-line.cm-errorLine {
-  background-color: #fef2f2;
+  background-color: var(--color-error-dim);
 }
 
 /* Search-match scrollbar rail: fixed to the editor's right edge (not the OS
@@ -678,8 +687,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  background: #fff;
-  border: 1px solid #d1d5db;
+  background: var(--color-raise);
+  border: 1px solid var(--color-hairline);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
@@ -693,18 +702,21 @@ onUnmounted(() => {
   /* Right padding reserves the strip the match-count overlay sits in, so the
      count never affects the bar's width or the buttons' position. */
   padding: 3px 4rem 3px 6px;
-  border: 1px solid #d1d5db;
+  background: var(--color-head);
+  color: var(--color-ink);
+  border: 1px solid var(--color-hairline);
   border-radius: 4px;
   outline: none;
 }
-.tab-search-input:focus { border-color: #3b82f6; }
+.tab-search-input::placeholder { color: var(--color-ink-soft); }
+.tab-search-input:focus { border-color: var(--color-accent); }
 .tab-search-count {
   position: absolute;
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--color-ink-soft);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -715,12 +727,12 @@ onUnmounted(() => {
   width: 1.5rem;
   height: 1.5rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-ink-soft);
   background: transparent;
   border: none;
   border-radius: 4px;
   cursor: pointer;
 }
-.tab-search-btn:hover:not(:disabled) { background: #f3f4f6; }
-.tab-search-btn:disabled { color: #d1d5db; cursor: default; }
+.tab-search-btn:hover:not(:disabled) { background: var(--color-hairline); color: var(--color-ink); }
+.tab-search-btn:disabled { color: var(--color-ink-faint); cursor: default; }
 </style>
