@@ -16,11 +16,11 @@
  * Usage: `bun evals/regenerate-goldens-json.ts`
  */
 
+import { FIXTURES, filesBytesEqual } from "./utils";
 import { join } from "node:path";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { renderJsonFixture } from "./render-json";
 
-const FIXTURES = ["simple", "demo", "sample", "c", "t"];
 const GOLDENS_DIR = join(import.meta.dir, "goldens-json");
 
 /**
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
 
 	mkdirSync(GOLDENS_DIR, { recursive: true });
 	const prevGoldens = new Set(
-		readdirSync(GOLDENS_DIR).filter(f => f.endsWith(".png")),
+		readdirSync(GOLDENS_DIR).filter(f => /-p\d+\.png$/.test(f)),
 	);
 
 	type Entry = { pages: number; engineSha: string; renderedAt: string };
@@ -86,10 +86,8 @@ async function main(): Promise<void> {
 				if (!prevGoldens.has(png)) {
 					added.push(png);
 				} else {
-					const prevSize = Bun.file(dest).size;
-					const newSize = Bun.file(src).size;
-					if (prevSize !== newSize) changed.push(png);
-					else unchanged.push(png);
+					if (filesBytesEqual(src, dest)) unchanged.push(png);
+					else changed.push(png);
 				}
 				copyFileSync(src, dest);
 				prevGoldens.delete(png);

@@ -70,7 +70,6 @@ double get_special_width(char **pp, class /* struct */ i_buf *i_b,
 			 font_list *f_a[], int font, struct file_info *f);
 double print_special_char(char **pp, print *p, i_buf *i_b,
 			  font_list *f_a[], int font,  struct file_info *f, int italic );
-struct font_list *add_font(char *name, double scale);
 char * ps_map(char * name);
 
 extern double st_text;

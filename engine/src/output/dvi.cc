@@ -229,21 +229,6 @@ double str_to_inch(const char *string)
 }
 
 
-struct font_list *add_font(char *name, double scale)
-{
-    font_list *f;
-
-    f = new font_list;
-
-    f->next = NULL;
-    f->name = (char *) malloc (BL );
-				/* look for name in list */
-    strcpy (f->name, name);
-    f->num = ++max_font_num;
-    f->fnt = new tfm_font(name, scale);
-    return f;
-}
-
 #include "tree.h"
 
 char *

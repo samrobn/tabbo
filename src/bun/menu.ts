@@ -1,13 +1,18 @@
 import { ApplicationMenu, Utils } from "electrobun/bun";
 import type { ApplicationMenuItemConfig } from "electrobun/bun";
 
-const DOCS_URL = "https://www.cs.dartmouth.edu/~wbc/lute/AboutTab.html";
+// Wayne Cripps's Dartmouth lute pages were retired (the whole ~wbc/ path 403s);
+// point at the archive.org snapshot, which preserves the original AboutTab.html.
+const DOCS_URL =
+	"https://web.archive.org/web/20260420024741/https://www.cs.dartmouth.edu/~wbc/lute/AboutTab.html";
 
 const menuTemplate: ApplicationMenuItemConfig[] = [
 	{
 		label: "Tabbo",
 		submenu: [
 			{ role: "about" },
+			{ type: "separator" },
+			{ label: "Check for Updates…", action: "app:checkForUpdates" },
 			{ type: "separator" },
 			{ role: "hide" },
 			{ role: "hideOthers" },
@@ -22,6 +27,7 @@ const menuTemplate: ApplicationMenuItemConfig[] = [
 			{ label: "New", action: "file:new", accelerator: "Cmd+N" },
 			{ label: "New from Template...", action: "file:newFromTemplate" },
 			{ label: "Open...", action: "file:open", accelerator: "Cmd+O" },
+			{ label: "Close File", action: "file:close", accelerator: "Cmd+W" },
 			{ type: "separator" },
 			{ label: "Save", action: "file:save", accelerator: "Cmd+S" },
 			{ label: "Discard Changes", action: "file:revert" },
@@ -30,8 +36,6 @@ const menuTemplate: ApplicationMenuItemConfig[] = [
 				action: "file:exportPdf",
 				accelerator: "Cmd+Shift+E",
 			},
-			{ type: "separator" },
-			{ label: "Close Window", action: "window:close", accelerator: "Cmd+W" },
 		],
 	},
 	{
@@ -52,6 +56,7 @@ const menuTemplate: ApplicationMenuItemConfig[] = [
 		label: "Help",
 		submenu: [
 			{ label: "Tablature Syntax Help", action: "help:syntax" },
+			{ label: "Keyboard Shortcuts", action: "help:shortcuts", accelerator: "Cmd+Shift+/" },
 			{ type: "separator" },
 			{ label: "Tab Documentation", action: "help:docs" },
 		],

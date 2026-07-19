@@ -1,0 +1,9 @@
+%n-numbers fixture - pins the two-digit N10/N12/N30 glyph composition
+%(regression: the tab-font PUA digit was sent to the body-text font
+%substitution instead of the lute face, rendering as a missing-glyph box)
+
+b
+1-aa c N10
+2-aa c N12
+3-aa c N30
+e

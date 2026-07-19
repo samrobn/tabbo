@@ -81,7 +81,7 @@ const renderedPages = computed(() => {
               :y="item.y"
               :font-family="item.fontFamily"
               :font-size="item.fontSize"
-              fill="black"
+              :fill="item.fill ?? 'black'"
               dominant-baseline="auto"
             >{{ item.char }}</text>
 
@@ -91,7 +91,7 @@ const renderedPages = computed(() => {
               :y="item.y"
               :font-family="item.fontFamily"
               :font-size="item.fontSize"
-              fill="black"
+              :fill="item.fill ?? 'black'"
               dominant-baseline="auto"
             >{{ item.text }}</text>
 
@@ -101,7 +101,7 @@ const renderedPages = computed(() => {
               :y="item.y"
               :width="item.width"
               :height="item.height"
-              fill="black"
+              :fill="item.fill ?? 'black'"
             />
 
             <path

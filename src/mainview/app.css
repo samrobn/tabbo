@@ -47,17 +47,12 @@
   --color-error-soft: var(--color-error-soft);
   --color-gold: var(--color-gold);
   --color-gold-soft: var(--color-gold-soft);
+  --color-on-accent: var(--color-on-accent);
   --font-sans: var(--font-ui);
   --font-weight-medium: var(--weight-strong);
   --font-weight-semibold: var(--weight-strong);
 }
 
-@font-face {
-  font-family: "Bricolage Grotesque";
-  src: url("/ui-fonts/BricolageGrotesque-Variable.woff2") format("woff2");
-  font-weight: 200 800;
-  font-display: swap;
-}
 @font-face {
   font-family: "Martian Mono";
   src: url("/ui-fonts/MartianMono-StdxLt.woff2") format("woff2");

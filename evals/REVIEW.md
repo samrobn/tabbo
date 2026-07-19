@@ -1,5 +1,7 @@
 # Visual review checklist
 
+`bun run evals` now fails the run on byte drift against the committed goldens (PS and JSON pipelines both gated; a Ghostscript version mismatch skips the PS byte-compare only, per `evals/README.md`). This checklist is for the acknowledgement step when a diff is intentional: after regenerating goldens (`bun evals/regenerate-goldens.ts` / `bun evals/regenerate-goldens-json.ts`), use it to judge whether the new goldens are visually correct before committing them — the byte gate only catches that something changed, not whether the change is right.
+
 How to compare engine output against committed goldens.
 
 The harness produces two PNG sets per fixture per run — review BOTH:
@@ -57,3 +59,4 @@ Practical consequence: changes to PostScript metadata that `pdfwrite` absorbs bu
 
 - **PS goldens**: `bun evals/regenerate-goldens.ts` (uses upstream reference binary at `evals/reference/tab` — see `evals/REFERENCE.md`).
 - **JSON goldens**: `bun evals/regenerate-goldens-json.ts` (uses local engine at `engine/tab`). Bump after intentional output changes in `json_print.cc`, shared layout, or `src/shared/layout-render.ts`. Records the engine commit sha in `MANIFEST.json` so future readers can trace which engine snapshot a golden reflects.
+- **WOFF2 coverage golden**: `bun evals/fonts-coverage.ts --update-golden` after an intentional font change (`.mf` sources, `build-woff2-fonts.sh` output, or `pua-mapping.json`). Eyeball `engine/dev/preview.html` first; the script refuses to write on a non-deterministic render. `bun run evals` re-runs the comparison automatically whenever the font sources' hash differs from the golden manifest.

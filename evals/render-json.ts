@@ -23,7 +23,7 @@ import {
 } from "../src/bun/capture-server";
 import { layoutToSvgPages } from "../src/shared/layout-render";
 import type { LayoutResult } from "../src/shared/rpc-types";
-import { getTabBinary, getFontsDir } from "./utils";
+import { FIXTURES, getTabBinary, getFontsDir } from "./utils";
 
 const TAB_TIMEOUT_MS = 5_000;
 
@@ -121,8 +121,6 @@ export async function renderJsonFixture(fixture: string, outDir: string): Promis
 	}
 	return pages.length;
 }
-
-const FIXTURES = ["simple", "demo", "sample", "c", "t"];
 
 export async function main(fixtureArg?: string): Promise<void> {
 	if (fixtureArg && !FIXTURES.includes(fixtureArg)) {

@@ -104,7 +104,9 @@ format_title(print *p, i_buf *i_b, font_list *f_a[], struct file_info *f)
 	  b_bp=&bbuf[0];
 	  p->movev("14.0 pt");
 	  p->push();
-	  break;
+	  continue;	// skip the trailing b_bp++: it would leave bbuf[0]
+			// holding a stale byte from the prior line, which then
+			// leaks into the rendered (final) title line
 	case '}':
 	  goto done;
 	case 0:

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9] - 2026-07-19
+
+### Added
+
+- Tabbo opens on a welcome screen when no document is loaded, with shortcuts to start a new file, open one, or pick a template; File > New starts a blank document and File > Close (Cmd+W) returns to the welcome screen. Your last-opened file still reopens automatically on launch.
+- The editor now warns when a `{}` title line is too wide to fit, before it collides with the right-aligned text in the preview and PDF.
+
+### Fixed
+
+- Preview text now matches the printed PDF; titles, lyrics, and captions could appear larger on screen than they printed.
+- Preview and PDF now agree on page count — they could differ by several pages on longer pieces.
+- Titles that span two lines no longer show stray leftover characters.
+- Fret numbers 18 to 23 now render correctly, instead of the wrong symbol or nothing.
+- The Help menu's documentation links open a working page again (the original reference site went offline).
+- The live preview now shows the coloured note highlights (grey, red, blue) that already appeared in the exported PDF.
+- Cancelling the Open dialog no longer shows a spurious “could not open” error.
+
+### Security
+
+- Hardened `.tab` file parsing against malformed input, so opening files from others is safer.
+
 ## [0.1.0-alpha.8] - 2026-07-12
 
 ### Added
@@ -118,7 +139,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Preview stability: stopped flicker between successive recompiles.
 - Bundled lute tablature fonts (renaissance, baroque, thin variants) and Ghostscript for self-contained offline use.
 
-[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.6...HEAD
+[Unreleased]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.9...HEAD
+[0.1.0-alpha.9]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
+[0.1.0-alpha.8]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
+[0.1.0-alpha.7]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/samrobn/tabbo/compare/v0.1.0-alpha.3...v0.1.0-alpha.4

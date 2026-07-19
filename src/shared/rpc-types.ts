@@ -21,18 +21,29 @@ export interface FontDescriptor {
 
 export type LayoutPrimitive =
 	| {
+			// highlight = the author's Q/@ editorial marking colour (mirrors the
+			// engine's P_S_GRAY/RED/BLUE in the exported PDF). Optional: absent =
+			// no highlight, render black. Lets the preview match the export.
 			type: "glyph";
 			font_id: number;
 			char_code: number;
 			x: number;
 			y: number;
+			highlight?: "gray" | "red" | "blue";
 	  }
 	| {
+			// width = TFM advance across the run (DVI units, same scale as x).
+			// Optional: absent from output predating the field. Used by the
+			// editor's title-overflow lint to compare rendered extents.
 			type: "text_run";
 			font_id: number;
 			x: number;
 			y: number;
+			width?: number;
 			text: string;
+			// highlight: a font-0 text run (e.g. a two-digit fret's tens digit)
+			// can be Q/@-marked; body text (titles/lyrics) never is.
+			highlight?: "gray" | "red" | "blue";
 	  }
 	| {
 			type: "rule";
@@ -40,6 +51,8 @@ export type LayoutPrimitive =
 			y: number;
 			width: number;
 			height: number;
+			// highlight: as for glyph — a Q/@-marked barline renders in colour.
+			highlight?: "gray" | "red" | "blue";
 	  }
 	| {
 			type: "tie";
@@ -57,11 +70,15 @@ export type LayoutPrimitive =
 	  }
 	| {
 			// slash: width = span across string courses, count = number of slash marks.
+			// thickness (DVI units) mirrors ps_print::put_slash - 0.023 in under
+			// LSA_FORM, 0.005 in otherwise. Optional: absent from output predating
+			// the field.
 			type: "slash";
 			x: number;
 			y: number;
 			width: number;
 			count: number;
+			thickness?: number;
 	  }
 	| {
 			// uline: variant distinguishes standard, reversed, and wide underlines.
@@ -175,9 +192,12 @@ export type MenuAction =
 	| "new"
 	| "newFromTemplate"
 	| "showHelp"
+	| "showShortcuts"
+	| "checkForUpdates"
 	| "find"
 	| "quitRequested"
-	| "closeRequested";
+	| "closeRequested"
+	| "close";
 
 // ---------------------------------------------------------------------------
 // Auto-update types
@@ -301,6 +321,12 @@ export type TabboRPC = {
 			menuAction: { action: MenuAction };
 			/** Bun pushes update lifecycle events to the webview as they occur. */
 			updateStatusChanged: { status: UpdateStatus };
+			/**
+			 * A file opened via the OS (Finder double-click, Open With, Dock drop).
+			 * Warm-only: opens that launch the app are dropped upstream (Electrobun
+			 * v1.16.0 registers the native handler after the event fires).
+			 */
+			openExternalFile: { path: string };
 		};
 	}>;
 };

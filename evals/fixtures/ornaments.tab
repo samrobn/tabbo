@@ -1,0 +1,24 @@
+%ornaments fixture - pins the five <!...> ornament specials.
+%Their staff[] byte codes were remapped out of the N-number range (230-250)
+%so N18-N23 render as fret numbers; this fixture proves the ornaments still
+%render. No N-numbers >=18, so ornament PS output is byte-identical to the
+%upstream reference and this fixture is fully reference-comparable.
+%half-cross/stroke/stroke# render in any style; the two mordents only draw
+%under -b (baroque), so a baroque section follows the renaissance one.
+
+b
+0-a<!half-cross>
+0-a<!stroke>
+0-a<!stroke#>
+b
+
+-b
+
+b
+0-a<!half-cross>
+0-a<!stroke>
+0-a<!stroke#>
+0-a<!2mordent>
+0-a<!3mordent>
+b
+e

@@ -280,10 +280,10 @@ void pass1(font_list *f_a[], int *l_p, struct file_info *f, double *extra)
 	  dbg0 ( Inter, "  v");
 	else if (dd == 222)
 	  dbg0 ( Inter, " +*");
-	else if (dd == 238)
-	  dbg0 ( Inter, "238");
-	else if (dd == 239)
-	  dbg0 ( Inter, "239");
+	else if (dd == 200)
+	  dbg0 ( Inter, "200");
+	else if (dd == 201)
+	  dbg0 ( Inter, "201");
 	else if (dd == 254)
 	  dbg0 ( Inter, "254");
 	else if (dd == 255)
@@ -332,13 +332,13 @@ void pass1(font_list *f_a[], int *l_p, struct file_info *f, double *extra)
 	l->padding = 0.01 /* str_to_inch(min_d_w) */;
       else if (strchr("{}[]()UX", c))
 	l->padding = 0.01;
-      else if ((unsigned char)d[2] == 239    /* stroke strokex */
-           || (unsigned char)d[3] == 239
-           || (unsigned char)d[4] == 239
-           || (unsigned char)d[2] == 243 
-           || (unsigned char)d[3] == 243 
-           || (unsigned char)d[4] == 243 
-           || (unsigned char)d[5] == 243) 
+      else if ((unsigned char)d[2] == 201    /* stroke strokex (bytes remapped from 239/243 out of N-number range 230-250) */
+           || (unsigned char)d[3] == 201
+           || (unsigned char)d[4] == 201
+           || (unsigned char)d[2] == 193
+           || (unsigned char)d[3] == 193
+           || (unsigned char)d[4] == 193
+           || (unsigned char)d[5] == 193)
 	l->padding = 0.05;
       else if (strchr("x", l->dat[2])||strchr("x", l->dat[3])
 	       ||strchr("x", l->dat[4])||strchr("x", l->dat[5]))
