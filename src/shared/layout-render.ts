@@ -47,9 +47,17 @@ export function substituteTextFont(family: string): string {
 	return "TabboBody, Georgia, 'Times New Roman', serif";
 }
 
-export type GlyphItem      = { kind: "glyph";       x: number; y: number; fontFamily: string; fontSize: number; char: string };
-export type TextRunItem    = { kind: "text_run";    x: number; y: number; fontFamily: string; fontSize: number; text: string };
-export type RuleItem       = { kind: "rule";        x: number; y: number; width: number; height: number };
+// Editorial-highlight colours: match the exported PDF (ps_print P_S_GRAY/RED/BLUE)
+// so the on-screen preview shows the author's Q/@ markings identically. Gray =
+// PS `0.5 setgray`; red = CMYK(0,1,1,0); blue = CMYK(0.5,0.5,0,0).
+const HIGHLIGHT_FILL: Record<string, string> = { gray: "#808080", red: "#ff0000", blue: "#8080ff" };
+export function highlightFill(h?: "gray" | "red" | "blue"): string | undefined {
+	return h ? HIGHLIGHT_FILL[h] : undefined;
+}
+
+export type GlyphItem      = { kind: "glyph";       x: number; y: number; fontFamily: string; fontSize: number; char: string; fill?: string };
+export type TextRunItem    = { kind: "text_run";    x: number; y: number; fontFamily: string; fontSize: number; text: string; fill?: string };
+export type RuleItem       = { kind: "rule";        x: number; y: number; width: number; height: number; fill?: string };
 export type PathItem       = { kind: "path";        d: string };
 export type FilledPathItem = { kind: "filled-path"; d: string };
 export type LineItem       = { kind: "line";        x1: number; y1: number; x2: number; y2: number; strokeWidth: number };
@@ -70,11 +78,28 @@ export function toRenderItem(p: LayoutPrimitive, fonts: Map<number, FontDescript
 				fontFamily: family,
 				fontSize: tabFontSizePt(family),
 				char: String.fromCodePoint(p.char_code),
+				fill: highlightFill(p.highlight),
 			};
 		}
 
 		case "text_run": {
 			const font = fonts.get(p.font_id);
+			// Tab-font text runs (e.g. json_print::set_a_char composing a
+			// two-digit N-number glyph from PUA codepoints on font 0) must use
+			// the lute WOFF2 face directly. substituteTextFont is for body
+			// text (titles/lyrics) only — applying it here sends PUA
+			// codepoints to Georgia/Times, which have no such glyph (tofu).
+			if (font?.type === "tab") {
+				return {
+					kind: "text_run",
+					x: dviToPt(p.x),
+					y: dviToPt(p.y),
+					fontFamily: font.family,
+					fontSize: tabFontSizePt(font.family),
+					text: p.text,
+					fill: highlightFill(p.highlight),
+				};
+			}
 			return {
 				kind: "text_run",
 				x: dviToPt(p.x),
@@ -82,12 +107,14 @@ export function toRenderItem(p: LayoutPrimitive, fonts: Map<number, FontDescript
 				fontFamily: substituteTextFont(font?.family ?? ""),
 				fontSize: font?.size_pt ?? 12,
 				text: p.text,
+				fill: highlightFill(p.highlight),
 			};
 		}
 
 		case "rule": {
 			return {
 				kind: "rule",
+				fill: highlightFill(p.highlight),
 				x: dviToPt(p.x),
 				y: dviToPt(p.y),
 				width: dviToPt(p.width),
@@ -134,7 +161,13 @@ export function toRenderItem(p: LayoutPrimitive, fonts: Map<number, FontDescript
 			// inconsistency preserved verbatim during the 2026-05-01 extraction; goldens
 			// were generated against this exact constant. Don't "fix" to 72 without
 			// regenerating evals/goldens-json/ and confirming the change is intentional.
-			const BEAM_THICK_PT = 0.005 * 72.27;
+			// Engine emits thickness in DVI units (0.023 in under LSA_FORM, else
+			// 0.005 in - see json_print::put_slash). Convert with the same 72.27
+			// factor as the rest of this branch; fall back to the historical
+			// constant when the field is absent (output predating it).
+			const thicknessPt = p.thickness !== undefined
+				? (p.thickness / DVI_PER_INCH) * 72.27
+				: 0.005 * 72.27;
 			const x = dviToPt(p.x);
 			const y = dviToPt(p.y);
 			const width = dviToPt(p.width);
@@ -145,16 +178,35 @@ export function toRenderItem(p: LayoutPrimitive, fonts: Map<number, FontDescript
 					x,
 					y: y + i * stepPt,
 					width,
-					height: BEAM_THICK_PT,
+					height: thicknessPt,
 				})),
 			};
 		}
 
 		case "uline": {
-			// Closed filled cubic-bezier lozenge matching PS dorslur / doslur.
 			const x = dviToPt(p.x);
 			const y = dviToPt(p.y);
 			const w = dviToPt(p.width);
+
+			if (p.variant === "wide") {
+				// Filled 4-segment wave matching PS dowslur (ps_print.cc): up-bump
+				// then down-bump over 6 deltas, 1.8pt-thick return path, ±0.2pt
+				// end tweaks. PS is y-up; offsets are negated for SVG's y-down.
+				const delta = w / 6;
+				const height = 3.7;
+				const thick = 1.8;
+				const d = [
+					`M ${x} ${y + height}`,
+					`C ${x + delta} ${y - height} ${x + 2 * delta} ${y - height} ${x + 3 * delta} ${y + 0.2}`,
+					`C ${x + 4 * delta} ${y + height} ${x + 5 * delta} ${y + height} ${x + 6 * delta} ${y - 0.6 * height}`,
+					`C ${x + 5 * delta} ${y + height + thick} ${x + 4 * delta} ${y + height + thick} ${x + 3 * delta} ${y - 0.2}`,
+					`C ${x + 2 * delta} ${y - height + thick} ${x + delta} ${y - height + thick} ${x} ${y + height}`,
+					"Z",
+				].join(" ");
+				return { kind: "filled-path", d };
+			}
+
+			// Closed filled cubic-bezier lozenge matching PS dorslur / doslur.
 			const delta = w / 3;
 
 			const isReversed = p.variant === "reversed";
@@ -220,13 +272,13 @@ function xmlEscape(s: string): string {
 export function renderItemToSvg(item: RenderItem): string {
 	switch (item.kind) {
 		case "glyph":
-			return `<text x="${item.x}" y="${item.y}" font-family="${item.fontFamily}" font-size="${item.fontSize}" fill="black" dominant-baseline="auto">${xmlEscape(item.char)}</text>`;
+			return `<text x="${item.x}" y="${item.y}" font-family="${item.fontFamily}" font-size="${item.fontSize}" fill="${item.fill ?? "black"}" dominant-baseline="auto">${xmlEscape(item.char)}</text>`;
 		case "text_run":
 			// Note: substituteTextFont may include single quotes (e.g. "'Courier New', monospace").
 			// SVG/HTML attributes can hold single quotes when wrapped in double quotes.
-			return `<text x="${item.x}" y="${item.y}" font-family="${item.fontFamily}" font-size="${item.fontSize}" fill="black" dominant-baseline="auto">${xmlEscape(item.text)}</text>`;
+			return `<text x="${item.x}" y="${item.y}" font-family="${item.fontFamily}" font-size="${item.fontSize}" fill="${item.fill ?? "black"}" dominant-baseline="auto">${xmlEscape(item.text)}</text>`;
 		case "rule":
-			return `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="black"/>`;
+			return `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="${item.fill ?? "black"}"/>`;
 		case "path":
 			return `<path d="${item.d}" fill="none" stroke="black" stroke-width="0.5"/>`;
 		case "filled-path":

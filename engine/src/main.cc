@@ -94,6 +94,46 @@ char *
 get_real_name(const char *short_name, int dump);
 				/* this bit loads in the tfm metrics */
 
+/* Text-font setup (f_a[1..7]), shared by the PS and JSON output paths in
+ * tfm_stuff - both need the same TFM metrics for advance widths and the
+ * font manifest; only the print object they construct afterwards differs.
+ * Slot roles: 1 words, 2 title, 3 italic title, 4 large title, 5 italic
+ * text, 6 plain text, 7 scale-compensated text. */
+static void init_text_fonts(struct font_list *f_a[], struct file_info *f)
+{
+	if (f->font_names[1]) {	// words
+	  f_a[1] = init_font_list(1, f->font_names[1], 1.2 );
+	  f_a[1]->real_name = get_real_name(f->font_names[1], 0);
+	}
+	else
+	  f_a[1] = init_font_list(1, "pncr", 1.0 );
+
+	if (f->font_names[2]) {	// title
+	  f_a[2] = init_font_list(2, f->font_names[2], f->font_sizes[2]/10. );
+	  f_a[2]->real_name = get_real_name(f->font_names[2], 0);
+	}
+	else
+	  f_a[2] = init_font_list(2, "pncr", f->font_sizes[2]/10.);
+
+	if (f->font_names[3]) {	// italic title
+	  f_a[3] = init_font_list(3, f->font_names[3], 1.2 );
+	  f_a[3]->real_name = get_real_name(f->font_names[3], 0);
+	}
+	else
+	  f_a[3] = init_font_list(3, "pncri", 1.2 );
+
+	f_a[4] = init_font_list(4, "pncr", 2.4 );
+
+	if (f->font_names[5]) {	// italic text
+	  f_a[5] = init_font_list(5, f->font_names[5], 1.0 );
+	  f_a[5]->real_name = get_real_name(f->font_names[5], 0);
+	}
+	else
+	  f_a[5] = init_font_list(5, "pncri", 1.0 );
+	f_a[6] = init_font_list(6, "pncr", 1.0 );
+	f_a[7] = init_font_list(7, "pncr", 1.0 / red );
+}
+
 void tfm_stuff(i_buf *b, file_info *f)
 {
     print **pp;
@@ -144,73 +184,13 @@ void tfm_stuff(i_buf *b, file_info *f)
 	 * TFM metrics are available for advance-width calculations and for
 	 * the font manifest.  We don't need pk bitmaps (only ps_print uses
 	 * them for the LuteFont type-3 PostScript font). */
-	if (f->font_names[1]) {
-	  f_a[1] = init_font_list(1, f->font_names[1], 1.2 );
-	  f_a[1]->real_name = get_real_name(f->font_names[1], 0);
-	}
-	else
-	  f_a[1] = init_font_list(1, "pncr", 1.0 );
-
-	if (f->font_names[2]) {
-	  f_a[2] = init_font_list(2, f->font_names[2], f->font_sizes[2]/10. );
-	  f_a[2]->real_name = get_real_name(f->font_names[2], 0);
-	}
-	else
-	  f_a[2] = init_font_list(2, "pncr", f->font_sizes[2]/10.);
-
-	if (f->font_names[3]) {
-	  f_a[3] = init_font_list(3, f->font_names[3], 1.2 );
-	  f_a[3]->real_name = get_real_name(f->font_names[3], 0);
-	}
-	else
-	  f_a[3] = init_font_list(3, "pncri", 1.2 );
-
-	f_a[4] = init_font_list(4, "pncr", 2.4 );
-
-	if (f->font_names[5]) {
-	  f_a[5] = init_font_list(5, f->font_names[5], 1.0 );
-	  f_a[5]->real_name = get_real_name(f->font_names[5], 0);
-	}
-	else
-	  f_a[5] = init_font_list(5, "pncri", 1.0 );
-	f_a[6] = init_font_list(6, "pncr", 1.0 );
-	f_a[7] = init_font_list(7, "pncr", 1.0 / red );
+	init_text_fonts(f_a, f);
 
 	jsp = new json_print(f_a, f);
 	pp = (print **)&jsp;
     }
     else {
-	if (f->font_names[1]) {	// words
-	  f_a[1] = init_font_list(1, f->font_names[1], 1.2 );
-	  f_a[1]->real_name = get_real_name(f->font_names[1], 0);
-	}
-	else
-	  f_a[1] = init_font_list(1, "pncr", 1.0 );
-
-	if (f->font_names[2]) {	// title
-	  f_a[2] = init_font_list(2, f->font_names[2], f->font_sizes[2]/10. );
-	  f_a[2]->real_name = get_real_name(f->font_names[2], 0);
-	}
-	else
-	  f_a[2] = init_font_list(2, "pncr", f->font_sizes[2]/10.);
-
-	if (f->font_names[3]) {	// italic title
-	  f_a[3] = init_font_list(3, f->font_names[3], 1.2 );
-	  f_a[3]->real_name = get_real_name(f->font_names[3], 0);
-	}
-	else
-	  f_a[3] = init_font_list(3, "pncri", 1.2 );
-
-	f_a[4] = init_font_list(4, "pncr", 2.4 );
-
-	if (f->font_names[5]) {	// italic text
-	  f_a[5] = init_font_list(5, f->font_names[5], 1.0 );
-	  f_a[5]->real_name = get_real_name(f->font_names[5], 0);
-	}
-	else
-	  f_a[5] = init_font_list(5, "pncri", 1.0 );
-	f_a[6] = init_font_list(6, "pncr", 1.0 );
-	f_a[7] = init_font_list(7, "pncr", 1.0 / red );
+	init_text_fonts(f_a, f);
 
 	psp = new ps_print (f_a, f);
 	pp = (print **)&psp;

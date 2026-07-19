@@ -314,7 +314,7 @@ score(print *p, struct list *l, struct file_info *f,
 	    do_text(p, i_b, f_a, l, l->text, f, 1, 1);
 	    p->pop();
 
-	    free (l->text);
+	    free_text(l->text);
 	    l->text = NULL;
 	}
 	break;

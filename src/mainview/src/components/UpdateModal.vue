@@ -92,7 +92,7 @@ watch(
             </button>
             <button
               @click="emit('download')"
-              class="px-3 py-1.5 text-sm font-semibold text-[#141414] bg-accent hover:bg-accent-soft rounded transition-colors"
+              class="px-3 py-1.5 text-sm font-semibold text-on-accent bg-accent hover:bg-accent-soft rounded transition-colors"
             >
               Install now
             </button>
@@ -134,7 +134,7 @@ watch(
             <button
               @click="emit('apply')"
               :disabled="isApplying"
-              class="px-3 py-1.5 text-sm font-semibold text-[#141414] bg-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-3 py-1.5 text-sm font-semibold text-on-accent bg-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               :class="{ 'hover:bg-accent-soft': !isApplying }"
             >
               {{ isApplying ? 'Restarting Tabbo…' : 'Restart now' }}

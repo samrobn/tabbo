@@ -4,9 +4,11 @@ Visual regression testing for the `engine/tab` typesetting engine. The existing 
 
 ## How it works
 
-- **Ghostscript harness** (`evals/run.ts`): renders `.tab` → `.ps` → `.pdf` (via `gs -sDEVICE=pdfwrite`) → `.png` (via `gs -sDEVICE=png16m`). Goldens at `evals/goldens/`. Catches engine-level regressions.
+- **Ghostscript harness** (`evals/run.ts`): renders `.tab` → `.ps` → `.pdf` (via `gs -sDEVICE=pdfwrite`) → `.png` (via `gs -sDEVICE=png16m`). Goldens at `evals/goldens/`. Catches engine-level regressions. Also runs the JSON pipeline (`engine/tab -worker` + Skia rasterisation) against goldens at `evals/goldens-json/`.
 
 **Goldens** are rendered by the upstream reference engine, not the local `engine/tab`. They represent what the canonical upstream binary produces. A mismatch means the local engine has diverged from upstream - intentionally or not.
+
+**`bun run evals` fails the run (non-zero exit) on byte drift against either committed golden set.** Every rendered page is byte-compared against `evals/goldens/` (PS) and `evals/goldens-json/` (JSON); a content difference, a new page with no committed golden, or a missing page all count as a failure. If the resolved Ghostscript version doesn't match what the PS goldens were rendered with (`evals/goldens/MANIFEST.json`), the PS byte-compare is skipped for that run (loud warning printed) since the drift would be from Ghostscript, not the engine - the JSON-pipeline compare still runs and can still fail. A small number of pages are permanently skipped in the PS compare because the reference binary shares a bug a local fix corrects - see "Known PS divergences" in `evals/REFERENCE.md`. The intentional-change flow is unchanged: regenerate via `bun evals/regenerate-goldens.ts` (PS) / `bun evals/regenerate-goldens-json.ts` (JSON), visually review per `evals/REVIEW.md`, and commit the new goldens as the acknowledgement step - the byte gate only catches that something changed, not whether the change is correct.
 
 ### Retired: PDF.js harness (2026-04-27)
 
@@ -17,11 +19,11 @@ See `evals/REFERENCE.md` for details on the reference engine, its pinned commit,
 ## Run
 
 ```
-bun run evals              # Ghostscript harness, all 5 fixtures
+bun run evals              # Ghostscript harness, all fixtures
 bun run evals simple       # Ghostscript harness, single fixture by name
 ```
 
-Fixtures: `simple`, `demo`, `sample`, `c`, `t`.
+Fixtures: `simple`, `demo`, `sample`, `c`, `t`, `accents`, `uline-wide`, `n-numbers`, `pagenum`, `barnums` (authoritative list: `FIXTURES` in `utils.ts`).
 
 Output lands in `evals/runs/<timestamp>/` (gitignored). Each fixture produces a `.ps`, `.pdf`, and one `.png` per rendered page.
 
@@ -46,6 +48,8 @@ Run this after consciously bumping the reference engine pin in `evals/reference/
 bun run evals/regenerate-goldens.ts      # Ghostscript goldens (evals/goldens/)
 ```
 
+The pinned upstream reference binary aborts (SIGABRT, empty stderr) on long absolute paths - a fixed-size path buffer upstream; the fork's own binary is unaffected. The script therefore invokes it with repo-relative paths (`cwd` pinned to the repo root), which keeps regeneration working from long-path checkouts such as `.claude/worktrees/`.
+
 The script runs the full pipeline using the upstream reference binary, copies the resulting PNGs to `evals/goldens/`, and rewrites `MANIFEST.json`. Review the git diff before committing. See `evals/REFERENCE.md` for the full procedure.
 
 ## When to run the harness
@@ -54,4 +58,4 @@ After any change to `engine/src/**`, `engine/fonts/**`, or the `gs` build flags 
 
 ## Fixture coverage gaps
 
-The current five fixtures do not exercise every code path in the engine. Known gap: `simple.tab` runs the standard portrait `else` branch in `engine/src/output/ps_print.cc` (around line 337) but never the `LSA_FORM` branch at line 331. Regressions isolated to the `LSA_FORM` path will sail through a `simple`-only run. If you are changing code in a branch none of the current fixtures cover, add a new fixture that exercises it before relying on evals to catch the regression.
+The current fixtures do not exercise every code path in the engine. Known gap: `simple.tab` runs the standard portrait `else` branch in `engine/src/output/ps_print.cc` (around line 337) but never the `LSA_FORM` branch at line 331. Regressions isolated to the `LSA_FORM` path will sail through a `simple`-only run. If you are changing code in a branch none of the current fixtures cover, add a new fixture that exercises it before relying on evals to catch the regression.

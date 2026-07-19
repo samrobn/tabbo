@@ -1,11 +1,10 @@
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { readdirSync, copyFileSync, existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 
 // run.ts is used only for its runFixture helper, not its binary resolution.
 // Golden generation always uses the upstream reference binary, not the local engine.
 import { runFixture } from "./run.ts";
 
-const FIXTURES = ["simple", "demo", "sample", "c", "t"];
 const GOLDENS_DIR = join(import.meta.dir, "goldens");
 const REFERENCE_DIR = join(import.meta.dir, "reference");
 
@@ -33,6 +32,7 @@ function readReferenceSha(): string {
 // checks built paths first. To avoid coupling to that logic, we call our own spawn here.
 
 import { existsSync as fsExists } from "node:fs";
+import { FIXTURES, filesBytesEqual, getGsBinary, warnOnGsVersionMismatch } from "./utils";
 
 const TAB_TIMEOUT_MS = 5_000;
 const GS_TIMEOUT_MS = 3_000;
@@ -57,22 +57,15 @@ function getReferenceFontsDir(): string {
 	return p;
 }
 
-function getGsBinary(): string {
-	// Resolve gs the same way run.ts does, but without importing its private helper.
-	// Priority: packaged gs binary → gs/gs-minimal dev build → system gs.
-	const builtGs = join(import.meta.dir, "../resources/bin/gs");
-	if (fsExists(builtGs)) return builtGs;
-	const devGs = join(import.meta.dir, "../gs/gs-minimal");
-	if (fsExists(devGs)) return devGs;
-	return "gs";
-}
+
 
 async function spawnOrThrow(
 	args: string[],
-	opts: { env?: Record<string, string>; timeoutMs: number; label: string },
+	opts: { env?: Record<string, string>; timeoutMs: number; label: string; cwd?: string },
 ): Promise<void> {
 	const proc = Bun.spawn(args, {
 		env: opts.env ? { ...Bun.env, ...opts.env } : Bun.env,
+		cwd: opts.cwd,
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -114,16 +107,22 @@ async function runReferenceFixture(fixture: string, runDir: string): Promise<num
 	const outputPdf = join(runDir, `${fixture}.pdf`);
 	const outputPngPattern = join(runDir, `${fixture}-p%d.png`);
 
-	const tab = getReferenceBinary();
-	const fonts = getReferenceFontsDir();
+	getReferenceBinary();     // validate presence (spawn below uses relative paths)
+	getReferenceFontsDir();
 	const gs = getGsBinary();
 
 	// The upstream reference binary does not support -no-includes (that flag was added
 	// in the tabbo fork). Run without it - upstream silently warns on unknown flags and
 	// continues, but omitting it avoids the spurious warning on stderr.
+	//
+	// Spawn with cwd = evals/ and evals-relative paths: the reference binary
+	// aborts (SIGABRT, empty stderr) on long absolute paths - a fixed-size
+	// path buffer upstream - which broke regeneration from long-path
+	// checkouts such as .claude/worktrees/. tab/fonts existence was already
+	// validated above via the absolute-path getters.
 	await spawnOrThrow(
-		[tab, "-o", outputPs, inputTab],
-		{ env: { TABFONTS: fonts }, timeoutMs: TAB_TIMEOUT_MS, label: `ref-tab(${fixture})` },
+		[join("reference", "tab"), "-o", relative(import.meta.dir, outputPs), relative(import.meta.dir, inputTab)],
+		{ env: { TABFONTS: join("reference", "fonts") }, cwd: import.meta.dir, timeoutMs: TAB_TIMEOUT_MS, label: `ref-tab(${fixture})` },
 	);
 
 	await spawnOrThrow(
@@ -154,15 +153,18 @@ async function main(): Promise<void> {
 	const runDir = makeRunDir();
 
 	console.log(`Reference sha: ${referenceSha}`);
+	warnOnGsVersionMismatch(getGsBinary());
 	console.log(`Run directory: ${runDir}\n`);
 
 	const gs = getGsBinary();
 	const [gsVersion] = await Promise.all([getGsVersion()]);
 	const renderedAt = new Date().toISOString();
 
+	// Only fixture page PNGs (<fixture>-p<N>.png) are goldens here; woff2-coverage.png
+	// belongs to fonts-coverage.ts and must stay invisible to this add/change/remove logic.
 	const prevGoldens = new Set(
 		existsSync(GOLDENS_DIR)
-			? readdirSync(GOLDENS_DIR).filter((f) => f.endsWith(".png"))
+			? readdirSync(GOLDENS_DIR).filter((f) => /-p\d+\.png$/.test(f))
 			: [],
 	);
 
@@ -187,12 +189,10 @@ async function main(): Promise<void> {
 				if (!prevGoldens.has(png)) {
 					added.push(png);
 				} else {
-					const prevSize = Bun.file(dest).size;
-					const newSize = Bun.file(src).size;
-					if (prevSize !== newSize) {
-						changed.push(png);
-					} else {
+					if (filesBytesEqual(src, dest)) {
 						unchanged.push(png);
+					} else {
+						changed.push(png);
 					}
 				}
 

@@ -42,6 +42,7 @@
   --color-accent: var(--paint-coral);
   --color-accent-soft: var(--paint-coral-soft);
   --color-error-soft: var(--paint-red);
+  --color-on-accent: #141414; /* text/ink on accent + danger button fills; would break silently if accent went light */
   --color-gold: var(--paint-gold);
   --color-gold-soft: var(--paint-gold-soft);
   --syn-directive: var(--paint-mauve);

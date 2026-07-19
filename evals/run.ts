@@ -1,15 +1,24 @@
 import { join } from "node:path";
-import { mkdirSync, readdirSync } from "node:fs";
-import { getTabBinary, getFontsDir, getGsBinary } from "./utils";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { FIXTURES, filesBytesEqual, getTabBinary, getFontsDir, getGsBinary, warnOnGsVersionMismatch } from "./utils";
 
 const TAB_TIMEOUT_MS = 5_000;
 const GS_TIMEOUT_MS = 3_000;
+const PS_GOLDENS_DIR = join(import.meta.dir, "goldens");
+const JSON_GOLDENS_DIR = join(import.meta.dir, "goldens-json");
+
+// Pages where the PS byte-compare is known to diverge from the local engine
+// on purpose: the upstream reference binary shares a bug that a local engine
+// fix corrects, so the reference-generated PS golden can never match fixed
+// local output. JSON goldens are local-generated and pin the fix instead, so
+// this set is consulted by the PS comparison only. See evals/REFERENCE.md
+// "Known PS divergences" for the full list and the retirement condition.
+const PS_KNOWN_DIVERGENT = new Set(["sample-p1.png", "ncollide-p1.png"]);
+
 // Set TABBO_EVAL_SKIP_JSON=1 to run only the PS pass (faster iteration when
 // debugging engine output). The JSON pass is on by default so CI catches
 // regressions in either pipeline.
 const SKIP_JSON_PASS = process.env.TABBO_EVAL_SKIP_JSON === "1";
-
-const FIXTURES = ["simple", "demo", "sample", "c", "t"];
 
 function makeRunDir(): string {
 	// ISO 8601 with colons replaced by dashes for filesystem safety.
@@ -45,6 +54,45 @@ function countPngs(runDir: string, fixture: string): number {
 	return readdirSync(runDir).filter(
 		(f) => f.startsWith(`${fixture}-p`) && f.endsWith(".png"),
 	).length;
+}
+
+function fixturePngs(dir: string, fixture: string): string[] {
+	if (!existsSync(dir)) return [];
+	return readdirSync(dir).filter((f) => f.startsWith(`${fixture}-p`) && f.endsWith(".png"));
+}
+
+/**
+ * Byte-compare every rendered page against its committed golden. A rendered
+ * page with no matching golden (new page) and a golden with no matching
+ * rendered page (missing page) both count as mismatches, not just content
+ * drift. Prints one line per mismatch and returns whether everything matched.
+ */
+function compareToGoldens(renderedDir: string, goldensDir: string, fixture: string, pipeline: string): boolean {
+	const rendered = new Set(fixturePngs(renderedDir, fixture));
+	const goldens = new Set(fixturePngs(goldensDir, fixture));
+	let ok = true;
+
+	for (const name of rendered) {
+		if (pipeline === "PS" && PS_KNOWN_DIVERGENT.has(name)) {
+			console.log(`  ${fixture}: PS golden compare SKIPPED for ${name} (known divergence from reference - see evals/REFERENCE.md)`);
+			continue;
+		}
+		if (!goldens.has(name)) {
+			console.error(`  ${fixture}: ${pipeline} golden mismatch: ${name} (no committed golden)`);
+			ok = false;
+		} else if (!filesBytesEqual(join(renderedDir, name), join(goldensDir, name))) {
+			console.error(`  ${fixture}: ${pipeline} golden mismatch: ${name}`);
+			ok = false;
+		}
+	}
+	for (const name of goldens) {
+		if (!rendered.has(name)) {
+			console.error(`  ${fixture}: ${pipeline} golden mismatch: ${name} (missing rendered page)`);
+			ok = false;
+		}
+	}
+
+	return ok;
 }
 
 export async function runFixture(
@@ -91,6 +139,10 @@ export async function main(fixtureArg?: string): Promise<string> {
 
 	const runDir = makeRunDir();
 	console.log(`Run directory: ${runDir}\n`);
+	const skipPsGoldens = warnOnGsVersionMismatch(getGsBinary());
+	if (skipPsGoldens) {
+		console.error("! PS golden comparison SKIPPED for every fixture this run (see gs mismatch above). JSON-pipeline comparison still runs.\n");
+	}
 
 	const rows: Array<{ fixture: string; pages: number; psFirstPng: string; jsonFirstPng: string }> = [];
 	let failed = false;
@@ -115,6 +167,8 @@ export async function main(fixtureArg?: string): Promise<string> {
 		let jsonFirstPng = SKIP_JSON_PASS ? "(skipped)" : "(pending)";
 		let psOk = false;
 		let jsonOk = false;
+		let psGoldensOk = true;
+		let jsonGoldensOk = true;
 
 		try {
 			pages = await runFixture(fixture, runDir);
@@ -124,11 +178,18 @@ export async function main(fixtureArg?: string): Promise<string> {
 			failed = true;
 		}
 
+		if (psOk && !skipPsGoldens) {
+			psGoldensOk = compareToGoldens(runDir, PS_GOLDENS_DIR, fixture, "PS");
+			if (!psGoldensOk) failed = true;
+		}
+
 		if (psOk && renderJsonFixture) {
 			try {
 				await renderJsonFixture(fixture, jsonDir);
 				jsonFirstPng = join(jsonDir, `${fixture}-p1.png`);
 				jsonOk = true;
+				jsonGoldensOk = compareToGoldens(jsonDir, JSON_GOLDENS_DIR, fixture, "JSON");
+				if (!jsonGoldensOk) failed = true;
 			} catch (err) {
 				console.error(`  ${fixture}: JSON pass FAILED - ${(err as Error).message}`);
 				jsonFirstPng = "(failed)";
@@ -141,7 +202,18 @@ export async function main(fixtureArg?: string): Promise<string> {
 		// path in the summary.
 		if (psOk) {
 			rows.push({ fixture, pages, psFirstPng, jsonFirstPng });
-			const tag = SKIP_JSON_PASS ? "" : (jsonOk ? " (ps + json)" : " (ps ok, json FAILED)");
+			const psStatus = skipPsGoldens ? "skipped" : (psGoldensOk ? "match" : "MISMATCH");
+			let tag: string;
+			if (SKIP_JSON_PASS) {
+				tag = ` (ps, goldens ${psStatus})`;
+			} else if (!jsonOk) {
+				tag = ` (ps ok, json FAILED; ps goldens ${psStatus})`;
+			} else {
+				const jsonStatus = jsonGoldensOk ? "match" : "MISMATCH";
+				tag = psStatus === jsonStatus
+					? ` (ps + json, goldens ${psStatus})`
+					: ` (ps + json, ps goldens ${psStatus}, json goldens ${jsonStatus})`;
+			}
 			console.log(`  ${fixture}: ${pages} page(s)${tag}`);
 		}
 	}
@@ -157,6 +229,21 @@ export async function main(fixtureArg?: string): Promise<string> {
 			console.log(`${row.fixture.padEnd(10)} ${row.jsonFirstPng}`);
 		}
 	}
+
+	// Glyph-coverage eval - skipped unless the font sources' hash differs
+	// from the committed golden's manifest (see evals/fonts-coverage.ts).
+	try {
+		const coverage = Bun.spawnSync(
+			[process.execPath, join(import.meta.dir, "fonts-coverage.ts"), "--if-changed"],
+			{ stdout: "inherit", stderr: "inherit" },
+		);
+		if (coverage.exitCode !== 0) failed = true;
+	} catch (err) {
+		console.error(`fonts-coverage: failed to launch - ${(err as Error).message}`);
+		failed = true;
+	}
+
+	console.log(failed ? "\nFAILED - see errors above." : "\nAll fixtures rendered and matched their committed goldens.");
 
 	if (failed) process.exit(1);
 	return runDir;

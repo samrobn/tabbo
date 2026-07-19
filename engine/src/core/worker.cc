@@ -398,9 +398,16 @@ static void worker_run_layout(const std::string &content, file_info *f)
     }
 
     /* Write content to a temporary file for file_in to read.
-     * Use a process-unique path to avoid collisions with other instances. */
-    char tmppath[256];
-    snprintf(tmppath, sizeof(tmppath), "/tmp/tab_worker_%d.tab", (int)getpid());
+     * Use a process-unique path to avoid collisions with other instances.
+     * Resolve the directory from TMPDIR (sandboxed test runners redirect it;
+     * a hardcoded /tmp fails there with EPERM), falling back to /tmp. */
+    static const char *tmpdir = NULL;
+    if (tmpdir == NULL) {
+        tmpdir = getenv("TMPDIR");
+        if (tmpdir == NULL || tmpdir[0] == '\0') tmpdir = "/tmp";
+    }
+    char tmppath[1024];
+    snprintf(tmppath, sizeof(tmppath), "%s/tab_worker_%d.tab", tmpdir, (int)getpid());
 
     {
         FILE *fp = fopen(tmppath, "wb");

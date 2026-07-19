@@ -15,7 +15,7 @@ node::node()
   root = this;
   p = l = r = 0;
   k = (char *)malloc(6);
-  strcpy (k, "null");
+  snprintf (k, 6, "%s", "null");
   v = 0;
   //  fprintf (stderr, "init root %X\n", root);
 }
@@ -32,7 +32,7 @@ node::node(const char *key, void *val, node *top)
 
   k = (char *)malloc(strlen(key)+2);
   //  k = new char(strlen(key)+2); malloc is better for windows
-  strcpy (k, key);
+  snprintf (k, strlen(key)+2, "%s", key);
   // printf("new node: %s\n", key);
   v = val;
   r = 0;
@@ -227,8 +227,8 @@ void tree::dumpval(node * n)
 
 void set_lutefont(const char *value, struct file_info *f)
 {
-  f->font_names[0] = (char *) malloc (strlen (value));
-  strcpy (f->font_names[0], value);
+  f->font_names[0] = (char *) malloc (strlen (value) + 1);
+  snprintf (f->font_names[0], strlen (value) + 1, "%s", value);
   //  if ( ! (f->m_flags & QUIET))
   //    dbg1 (Warning, "tab: lutefont = %s\n", (void *)value);
 }
@@ -330,30 +330,30 @@ void set_line(const char *value, struct file_info *f)
 
 void set_textfont(const char *value, struct file_info *f)
 {
-    f->font_names[1] = (char *) malloc (strlen (value));
-    strcpy (f->font_names[1], value);
+    f->font_names[1] = (char *) malloc (strlen (value) + 1);
+    snprintf (f->font_names[1], strlen (value) + 1, "%s", value);
     //    dbg1 (Warning, "tab: set_textfont %s\n", (void *)value);
 }
 void set_alt_textfont(const char *value, struct file_info *f)
 {
-    f->font_names[5] = (char *) malloc (strlen (value));
-    strcpy (f->font_names[5], value);
+    f->font_names[5] = (char *) malloc (strlen (value) + 1);
+    snprintf (f->font_names[5], strlen (value) + 1, "%s", value);
     //    dbg1 (Warning, "tab: set_textfont %s\n", (void *)value);
 }
 
 void set_dvitextfont(const char *value, struct file_info *f)
 {
     if (f->flags & DVI_O ){
-	f->font_names[1] = (char *) malloc (strlen (value));
-	strcpy (f->font_names[1], value);
+	f->font_names[1] = (char *) malloc (strlen (value) + 1);
+	snprintf (f->font_names[1], strlen (value) + 1, "%s", value);
 	//    dbg1 (Warning, "tab: set_textfont %s\n", (void *)value);
     }
 }
 void set_dvialttextfont(const char *value, struct file_info *f)
 {
     if (f->flags & DVI_O ){
-	f->font_names[5] = (char *) malloc (strlen (value));
-	strcpy (f->font_names[5], value);
+	f->font_names[5] = (char *) malloc (strlen (value) + 1);
+	snprintf (f->font_names[5], strlen (value) + 1, "%s", value);
 	//    dbg1 (Warning, "tab: set_textfont %s\n", (void *)value);
     }
 }
@@ -361,16 +361,16 @@ void set_dvialttextfont(const char *value, struct file_info *f)
 void set_pstextfont(const char *value, struct file_info *f)
 {
     if (f->flags & PS ){
-	f->font_names[1] = (char *) malloc (strlen (value));
-	strcpy (f->font_names[1], value);
+	f->font_names[1] = (char *) malloc (strlen (value) + 1);
+	snprintf (f->font_names[1], strlen (value) + 1, "%s", value);
 	//    dbg1 (Warning, "tab: set_textfont %s\n", (void *)value);
     }
 }
 void set_psalttextfont(const char *value, struct file_info *f)
 {
     if (f->flags & PS ){
-	f->font_names[5] = (char *) malloc (strlen (value));
-	strcpy (f->font_names[5], value);
+	f->font_names[5] = (char *) malloc (strlen (value) + 1);
+	snprintf (f->font_names[5], strlen (value) + 1, "%s", value);
 	//    dbg1 (Warning, "tab: set_textfont %s\n", (void *)value);
     }
 }
@@ -396,42 +396,42 @@ void set_alttextsize(const char *value, struct file_info *f)
 }
 void set_titlefont(const char *value, struct file_info *f)
 {
-    f->font_names[2] = (char *)malloc (strlen (value));
-    strcpy (f->font_names[2], value);
+    f->font_names[2] = (char *) malloc (strlen (value) + 1);
+    snprintf (f->font_names[2], strlen (value) + 1, "%s", value);
 }
 void set_alt_titlefont(const char *value, struct file_info *f)
 {
-    f->font_names[3] = (char *)malloc (strlen (value));
-    strcpy (f->font_names[3], value);
+    f->font_names[3] = (char *) malloc (strlen (value) + 1);
+    snprintf (f->font_names[3], strlen (value) + 1, "%s", value);
     if ( ! (f->m_flags & QUIET))
       dbg1 (Warning, "tab: set_alt_titlefont: %s\n", (void *)value);
 }
 void set_dvititlefont(const char *value, struct file_info *f)
 {
     if (f->flags & DVI_O) {
-	f->font_names[2] = (char *)malloc (strlen (value));
-	strcpy (f->font_names[2], value);
+	f->font_names[2] = (char *) malloc (strlen (value) + 1);
+	snprintf (f->font_names[2], strlen (value) + 1, "%s", value);
     }
 }
 void set_dvialttitlefont(const char *value, struct file_info *f)
 {
     if (f->flags & DVI_O) {
-	f->font_names[3] = (char *)malloc (strlen (value));
-	strcpy (f->font_names[3], value);
+	f->font_names[3] = (char *) malloc (strlen (value) + 1);
+	snprintf (f->font_names[3], strlen (value) + 1, "%s", value);
     }
 }
 void set_pstitlefont(const char *value, struct file_info *f)
 {
     if (f->flags & PS) {
-	f->font_names[2] = (char *)malloc (strlen (value));
-	strcpy (f->font_names[2], value);
+	f->font_names[2] = (char *) malloc (strlen (value) + 1);
+	snprintf (f->font_names[2], strlen (value) + 1, "%s", value);
     }
 }
 void set_psalttitlefont(const char *value, struct file_info *f)
 {
     if (f->flags & PS) {
-	f->font_names[3] = (char *)malloc (strlen (value));
-	strcpy (f->font_names[3], value);
+	f->font_names[3] = (char *) malloc (strlen (value) + 1);
+	snprintf (f->font_names[3], strlen (value) + 1, "%s", value);
 	if ( ! (f->m_flags & QUIET))
 	  dbg1 (Warning, "tab: set_psalttitlefont: %s\n", (void *)value);
     }
@@ -510,7 +510,7 @@ void set_scribe(const char *value, struct file_info *f)
     dbg0(Warning, "set scribe - re setting scribe\n");
   }
   f->scribe = (char * )malloc (strlen(value)+1);
-  strcat (f->scribe, value);
+  snprintf (f->scribe, strlen(value)+1, "%s", value);
   f->scribe[strlen(value)] = 0;
 }
 void set_left_margin(const char *value, struct file_info *f)

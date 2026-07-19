@@ -237,19 +237,23 @@ void i_buf::dump(const char *fname, const mode mode)	// dump to a file
 	error = FSClose(refNum);
     dbg1(Warning, "i_buff::dump: done%c", (void *)NEWLINE);
 #else /* not  MAC */
-    static FILE *fp;
+    FILE *fp = NULL;
     int n_written, file_bytes;
+    const int to_stdout = !strcmp(fname, "stdout");
 
     // printf("i_buf: dump: %s\n", fname);
 
     Seek(rew, 0);
 
-    if (!strcmp(fname, "stdout")) { // write to stdout
-      if (mode == Creat)
+    if (to_stdout) { // write to stdout
 #ifdef BUILD_FOR_WINDOWS
-	fp = _fdopen(1, "wb");
+      // _fdopen once and cache: fd 1 must never be fclosed, and a fresh
+      // FILE per call would leak a CRT stdio slot each dump.
+      static FILE *stdout_wb = NULL;
+      if (stdout_wb == NULL) stdout_wb = _fdopen(1, "wb");
+      fp = stdout_wb;
 #else
-	fp = fdopen(1, "wb");
+      fp = stdout;
 #endif
     }
 /*
@@ -272,19 +276,26 @@ void i_buf::dump(const char *fname, const mode mode)	// dump to a file
 
     if (fp == NULL) {
 	dbg1(Error, "tab: i_buf: dump: can't open %s for output\n", (void *)fname);
+	return; // dbg(Error) exits/longjmps today; belt-and-braces if that changes
     }
 
     file_bytes = num_bytes;
     while (file_bytes > 0) {
-	n_written = fwrite(buf_l->bytes, 1, my_min(file_bytes, BUFSIZ), fp);
+	int chunk = my_min(file_bytes, BUFSIZ);
+	n_written = fwrite(buf_l->bytes, 1, chunk, fp);
+	if (n_written < chunk) { // fwrite short-writes only on error (disk full,
+	    // closed pipe) - advancing past it would silently drop bytes
+	    dbg1(Error, "tab: i_buf: dump: write failed for %s\n", (void *)fname);
+	    break;
+	}
 	if (buf_l->next) buf_l = buf_l->next;
 	file_bytes -= n_written;
 	dbg1(Flow, "%u bytes left\n", (void *)file_bytes);
     }
 
-    if (strcmp(fname, "stdout"))
-      fclose(fp);
-    else if (mode == Append)
+    if (to_stdout)
+      fflush(fp); // fp aliases the process's stdout - flush, never fclose
+    else
       fclose(fp);
 #endif
 }

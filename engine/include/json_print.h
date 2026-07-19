@@ -43,8 +43,16 @@ enum TieVariant  { TIE_NORMAL, TIE_REVERSED, TIE_HALF, TIE_HALF_REVERSED };
 enum UlineVariant { ULINE_NORMAL, ULINE_REVERSED, ULINE_WIDE };
 enum SlantWeight { SLANT_THIN, SLANT_MED, SLANT_THICK };
 
+/* Editorial highlight colour for a glyph/rule (author's Q/@ markings). Mirrors
+ * ps_print's P_S_GRAY/RED/BLUE; the preview renders these so the on-screen view
+ * matches the exported PDF. HL_NONE = no highlight (field omitted from JSON). */
+enum HighlightKind { HL_NONE, HL_GRAY, HL_RED, HL_BLUE };
+
 struct JsonPrimitive {
     JsonPrimType type;
+
+    /* editorial highlight colour (glyph/rule); HL_NONE for the common case */
+    HighlightKind highlight_kind;
 
     /* glyph */
     int   glyph_font_id;
@@ -56,6 +64,7 @@ struct JsonPrimitive {
     int   run_font_id;
     int   run_x;
     int   run_y;
+    int   run_width;         /* TFM advance across the run, DVI units (same scale as run_x) */
     std::string run_text;    /* UTF-8 encoded string */
 
     /* rule */
@@ -75,6 +84,7 @@ struct JsonPrimitive {
     int   slash_y;
     int   slash_width;       /* save_h[eloc] - save_h[bloc] */
     int   slash_count;
+    int   slash_thickness;   /* DVI units; 0.023 in under LSA_FORM, else 0.005 in */
 
     /* uline */
     int   uline_x;
@@ -96,11 +106,12 @@ struct JsonPrimitive {
 
     JsonPrimitive() :
         type(JPRIM_GLYPH),
+        highlight_kind(HL_NONE),
         glyph_font_id(0), glyph_char_code(0), glyph_x(0), glyph_y(0),
-        run_font_id(0), run_x(0), run_y(0),
+        run_font_id(0), run_x(0), run_y(0), run_width(0),
         rule_x(0), rule_y(0), rule_width(0), rule_height(0),
         tie_x(0), tie_y(0), tie_length(0), tie_variant(TIE_NORMAL),
-        slash_x(0), slash_y(0), slash_width(0), slash_count(0),
+        slash_x(0), slash_y(0), slash_width(0), slash_count(0), slash_thickness(0),
         uline_x(0), uline_y(0), uline_width(0), uline_variant(ULINE_NORMAL),
         slant_x1(0), slant_y1(0), slant_x2(0), slant_y2(0), slant_weight(SLANT_THIN),
         curve_x(0), curve_y(0), curve_len(0)
@@ -158,6 +169,7 @@ class json_print : public print {
     int    run_y;
     std::string run_text;
     int    run_last_advance;  /* TFM advance of last char, in DVI units */
+    HighlightKind run_highlight;  /* highlight at run open; a run never mixes colours */
 
     /* font array and file_info pointers (set at construction) */
     struct font_list **f_a;
@@ -167,7 +179,9 @@ class json_print : public print {
     char out_fname[BUFSIZ];
 
     /* page dimensions (DVI units) */
-    int page_top_dvi;   /* ps_top_of_page equivalent */
+    int page_top_dvi;   /* physical paper height; page_height reference only */
+    int page_v_origin;  /* pagination v-register start AND y-conversion origin;
+                           mirrors ps_print::ps_top_of_page */
     int page_width_dvi;
     int left_margin_dvi;
     int top_margin_dvi;
@@ -184,6 +198,8 @@ class json_print : public print {
     JsonPage   &current_page();
     JsonSystem &current_system();
     void emit_primitive(const JsonPrimitive &p);
+    /* Map the base-class highlight state to a JSON highlight colour. */
+    HighlightKind current_highlight() const;
 
     /* JSON serialisation */
     void write_json(const char *fname);
@@ -198,7 +214,7 @@ class json_print : public print {
      * longjmp error path in worker mode to prevent corrupted output. */
     bool abandon_output;
 
-    int dvi_v_to_y(int v) { return (page_top_dvi - v); }
+    int dvi_v_to_y(int v) { return (page_v_origin - v); }
 
 public:
     json_print(font_list *f[], file_info *ff);
@@ -249,6 +265,18 @@ public:
 
     int  more();
     int  get_page_number() { return npages; }
+
+    /* print::ps_top() defaults to 0 (base-class stub); ps_print overrides
+     * it to return ps_top_of_page (the v-register value at top of page in
+     * its own coordinate system). format_pagenum (dvi_f.cc) uses
+     * "v - p->ps_top()" as a page-top-relative no-op move regardless of
+     * backend. Without this override that expression evaluates to
+     * page_v_origin instead of 0, which json_print::p_movev (dvi_v -= ver)
+     * turns into a full page-height jump -- pushing the page number below
+     * the bottom edge of the page. Mirror ps_print: return this backend's
+     * own top-of-page v-value (page_v_origin, the pagination origin the
+     * per-page dvi_v reset uses). */
+    int  ps_top() { return page_v_origin; }
 
     void showsave(int /*reg*/) {}
     void p_num(int n);

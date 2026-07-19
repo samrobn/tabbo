@@ -26,11 +26,13 @@ const graphiteHighlight = HighlightStyle.define([
 interface Props {
   modelValue: string
   errorLines?: number[]
+  warnLines?: number[]
   fontSize?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
   errorLines: () => [],
+  warnLines: () => [],
   fontSize: 14,
 })
 
@@ -145,6 +147,40 @@ const errorLinesField = StateField.define<DecorationSet>({
           if (lineNum >= 1 && lineNum <= tr.state.doc.lines) {
             const line = tr.state.doc.line(lineNum)
             builder.push({ from: line.from, to: line.from, value: errorLineMark })
+          }
+        }
+        return Decoration.set(builder.map(({ from, value }) => value.range(from)))
+      }
+    }
+    return decorations.map(tr.changes)
+  },
+  provide: f => EditorView.decorations.from(f)
+})
+
+// Title-overflow warning lines. Independent of errorLinesField (a line can be
+// both a compile error and an over-wide title) — cloned from the error-line
+// machinery above, but styled as a warning, not an error. The native `title`
+// attribute surfaces the "why" on hover.
+const setWarnLinesEffect = StateEffect.define<number[]>()
+
+const warnLineMark = Decoration.line({
+  class: 'cm-titleOverflow',
+  attributes: { title: 'Title too wide — it will overlap the right-aligned text; split it across {} lines' },
+})
+
+const warnLinesField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none
+  },
+  update(decorations, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setWarnLinesEffect)) {
+        const lines = effect.value
+        const builder: { from: number; value: Decoration }[] = []
+        for (const lineNum of lines) {
+          if (lineNum >= 1 && lineNum <= tr.state.doc.lines) {
+            const line = tr.state.doc.line(lineNum)
+            builder.push({ from: line.from, value: warnLineMark })
           }
         }
         return Decoration.set(builder.map(({ from, value }) => value.range(from)))
@@ -469,6 +505,7 @@ onMounted(() => {
       languageConf.of(tab()),
       syntaxHighlighting(graphiteHighlight, { fallback: true }),
       errorLinesField,
+      warnLinesField,
       barRuler(),
       search(),
       searchHighlighter,
@@ -609,6 +646,15 @@ watch(() => props.errorLines, (newErrorLines) => {
   })
 }, { immediate: true })
 
+// Sync title-overflow warning lines to editor
+watch(() => props.warnLines, (newWarnLines) => {
+  if (!editorView.value) return
+
+  editorView.value.dispatch({
+    effects: setWarnLinesEffect.of(newWarnLines)
+  })
+}, { immediate: true })
+
 // Cleanup on unmount
 onUnmounted(() => {
   detachBlinkFreeze?.()
@@ -664,6 +710,17 @@ onUnmounted(() => {
 
 .cm-editor .cm-line.cm-errorLine {
   background-color: var(--color-error-dim);
+}
+
+/* Title-overflow warning line: amber/gold, distinct from the red error line
+   (a line can carry both — the fields are independent). */
+.cm-titleOverflow {
+  background-color: rgba(201, 165, 104, 0.13) !important;
+  border-left: 3px solid var(--color-gold);
+}
+
+.cm-editor .cm-line.cm-titleOverflow {
+  background-color: rgba(201, 165, 104, 0.13);
 }
 
 /* Search-match scrollbar rail: fixed to the editor's right edge (not the OS

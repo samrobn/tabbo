@@ -614,7 +614,7 @@ struct list *l)			/* data */
       do_text(p, i_b, f_a, l, l->text, f, 1, 1);
       p->pop();
 
-      free (l->text);
+      free_text(l->text);
       l->text = NULL;
     }
     break;
@@ -1392,8 +1392,8 @@ struct list *l)			/* data */
 	do_uline(p, &skip_spaces, 7, 8, i);
 	break;
 		/*  new <! special characters  here */
-      case 238:  //  <!half-cross>
-	// printf("dvi_f: case 238  %d  %s\n", i, ch);
+      case 200:  //  <!half-cross> (was 238; remapped out of N-number range 230-250)
+	// printf("dvi_f: case 200  %d  %s\n", i, ch);
 	p->push();
 	if (skip_spaces) {
 	  p->p_movev(skip_spaces * i_space);
@@ -1407,8 +1407,8 @@ struct list *l)			/* data */
 	p->half_cross ();
 	p->pop();
 	break;
-      case 239:	 // <!stroke>
-	// printf("dvi_f: case 239  %d  %s\n", i, ch);
+      case 201:	 // <!stroke> (was 239; remapped out of N-number range 230-250)
+	// printf("dvi_f: case 201  %d  %s\n", i, ch);
 	p->push();
 	if (skip_spaces) {
 	  p->p_movev(skip_spaces * i_space);
@@ -1421,9 +1421,9 @@ struct list *l)			/* data */
 	p->stroke();
 	p->pop();
 	break;
-      case 240: /* wbc aug 2019 new <! special characters  here */
-	/* 2mordent twomordent */
-	// printf("dvi_f: case 240  %d  %s\n", i, ch);
+      case 208: /* wbc aug 2019 new <! special characters  here */
+	/* 2mordent twomordent (staff byte was 240; remapped out of N-number range 230-250) */
+	// printf("dvi_f: case 208  %d  %s\n", i, ch);
 	if (skip_spaces) {
 	  p->p_movev(skip_spaces * i_space);
 	  skip_spaces = 0;
@@ -1432,7 +1432,7 @@ struct list *l)			/* data */
 	if (ch[0] != '+' && ch[0] != '&')
 	  p->moveh(-0.097);
 	if (baroque)
-	  p->put_a_char (cc);
+	  p->put_a_char (240); /* font glyph code, decoupled from the staff byte */
 	p->pop();
 	break;
       case 222: /* wbc jan 2025 special dot above cross */
@@ -1454,9 +1454,9 @@ struct list *l)			/* data */
 	p->put_a_char ('.');
 	p->pop();
 	break;
-      case 241: /* wbc aug 2019 new special characters  here */
-	/* 3mordent threemordent */
-	// printf("dvi_f: case 241  %d  %s\n", i, ch);
+      case 210: /* wbc aug 2019 new special characters  here */
+	/* 3mordent threemordent (staff byte was 241; remapped out of N-number range 230-250) */
+	// printf("dvi_f: case 210  %d  %s\n", i, ch);
 	if (skip_spaces) {
 	  p->p_movev(skip_spaces * i_space);
 	  skip_spaces = 0;
@@ -1465,12 +1465,12 @@ struct list *l)			/* data */
 	if (ch[0] != '+' && ch[0] != '&')
 	  p->moveh(-0.1);
 	if (baroque)
-	  p->put_a_char (cc);
+	  p->put_a_char (241); /* font glyph code, decoupled from the staff byte */
 	p->pop();
 	break;
-      case 243: /* <! special characters  here */
-        /* stroke# */
-        // printf("dvi_f: case 243  %d  %s\n", i, ch);
+      case 193: /* <! special characters  here */
+        /* stroke# (staff byte was 243; remapped out of N-number range 230-250) */
+        // printf("dvi_f: case 193  %d  %s\n", i, ch);
         if (skip_spaces) {
           p->p_movev(skip_spaces * i_space);
           skip_spaces = 0;
@@ -2010,28 +2010,12 @@ struct list *l)			/* data */
 
   if (l->text) {
     do_text(p, i_b, f_a, l, l->text, f, 0, 1);
-    /* Walk the full t_words chain (tab_p.cc builds it via ->next);
-     * mirrors the pass2.cc cleanup walk. */
-    struct t_words *tw = l->text->words;
-    while (tw) {
-      struct t_words *tw_next = tw->next;
-      if (tw->words) free(tw->words);
-      free(tw);
-      tw = tw_next;
-    }
-    free (l->text);
+    free_text(l->text);
     l->text = NULL;
   }
   if (l->text2) {
     do_text(p, i_b, f_a, l, l->text2, f, 0, 2);
-    struct t_words *tw2 = l->text2->words;
-    while (tw2) {
-      struct t_words *tw2_next = tw2->next;
-      if (tw2->words) free(tw2->words);
-      free(tw2);
-      tw2 = tw2_next;
-    }
-    free (l->text2);
+    free_text(l->text2);
     l->text2 = NULL;
   }
   //    printf("dvi_format: space %f padding %f\n", l->space, l->padding);

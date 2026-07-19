@@ -149,6 +149,11 @@ struct list {
      double width;
  };
 
+/* Free a struct text and its whole t_words chain (built by get_text via
+ * ->next), including each node's owned word buffer. Callers null their
+ * pointer afterwards to keep later cleanup passes from double-freeing. */
+void free_text(struct text *t);
+
  struct w {
      char *width;
      double weight;

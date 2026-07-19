@@ -1,4 +1,5 @@
-import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
+import Electrobun, { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
+import { fileURLToPath } from "node:url";
 import { getEngineWorker } from "./engine-worker";
 import { openTabFile, saveTabFile, fileExists, readTabFile, previewSaveTarget, chooseFolder, exportPdfFromContent, getCapturesDir } from "./file-manager";
 import { loadSettings, updateSettings } from "./settings";
@@ -128,7 +129,10 @@ const menuActionMap: Record<string, MenuAction> = {
 	"file:save": "save",
 	"file:revert": "revert",
 	"file:exportPdf": "exportPdf",
+	"file:close": "close",
 	"help:syntax": "showHelp",
+	"help:shortcuts": "showShortcuts",
+	"app:checkForUpdates": "checkForUpdates",
 	"edit:find": "find",
 };
 
@@ -150,6 +154,34 @@ setupMenu((action) => {
 	if (menuAction) {
 		rpc.send.menuAction({ action: menuAction });
 	}
+});
+
+// OS document opens (Finder double-click / Open With / drag onto the Dock
+// icon). macOS delivers these through application:openURLs:, which Electrobun
+// bridges to the open-url event as a file:// URL. WARM-ONLY: an open that
+// launches the app is dropped upstream - the native event fires before this
+// handler registers and Electrobun v1.16.0 does not queue it (verified
+// empirically; upstream needs a queued open-file delivery). The degraded cold
+// path is benign: the app launches without the file and a second open, now
+// warm, succeeds.
+Electrobun.events.on("open-url", (event: { data: { url: string } }) => {
+	const url = event.data?.url ?? "";
+	if (!url.startsWith("file://")) return; // no custom URL schemes in use
+	let path: string;
+	try {
+		path = fileURLToPath(url); // handles %-encoding and literal ?/# safely
+	} catch {
+		return;
+	}
+	// Gate on the same extensions the open dialog allows - the UTI declaration
+	// only filters Finder's association list, not what a caller can hand this
+	// handler at runtime.
+	if (!/\.(tab|txt)$/i.test(path)) return;
+	// Push just the path; the webview reads it through the existing readFile
+	// RPC so read failures surface as its usual toast. Before first focus the
+	// push can be dropped by the named-pipe gate, which degrades to the benign
+	// cold-path behaviour (open again once the app is up).
+	rpc.send.openExternalFile({ path });
 });
 
 // Persist last opened file on startup

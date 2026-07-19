@@ -8,6 +8,20 @@
 #include "tfm.h"
 #include "i_buf.h"
 #include "system.h"
+
+
+void free_text(struct text *t)
+{
+    if (t == NULL) return;
+    struct t_words *tw = t->words;
+    while (tw) {
+	struct t_words *tw_next = tw->next;
+	if (tw->words) free(tw->words);
+	free(tw);
+	tw = tw_next;
+    }
+    free(t);
+}
 /* EXTERNAL */
 int num_staff=0;
 extern int n_measures;
@@ -888,8 +902,12 @@ int setflag(file_info *f, char * string, pass pass)
     char *p=string;
     char arg[40], val[80];
 
-    for (i=0;*p != '\0' && *p != NEWLINE && *p != '='; p++, i++) {
-	arg[i] = *p;
+    // Bound the write, not the scan: p must still advance to the delimiter so
+    // the value loop below starts from the right position. A directive name
+    // longer than the buffer truncates rather than overflowing the stack.
+    for (i=0;*p != '\0' && *p != NEWLINE && *p != '='; p++) {
+	if (i < (int)sizeof(arg) - 1)
+	    arg[i++] = *p;
     }
     //   if (pass == first)
     //     dbg0 (Warning, "setflag: first\n");
@@ -907,8 +925,9 @@ int setflag(file_info *f, char * string, pass pass)
     }
     //    dbg1 (Warning, "setflag: %s = ", (void *)arg);
 
-    for (i=0 ;*p != '\0' && *p != NEWLINE; p++, i++) {
-	val[i] = *p;
+    for (i=0 ;*p != '\0' && *p != NEWLINE; p++) {
+	if (i < (int)sizeof(val) - 1)
+	    val[i++] = *p;
     }
     val[i] = '\0';
     //    dbg1 (Warning, "%s\n", (void *)val);

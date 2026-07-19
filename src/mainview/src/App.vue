@@ -4,11 +4,14 @@ import Electrobun, { Electroview } from 'electrobun/view'
 import TabCodeEditor from './components/TabCodeEditor.vue'
 import TabPreview from './components/TabPreview.vue'
 import HelpPanel from './components/HelpPanel.vue'
+import ShortcutsPanel from './components/ShortcutsPanel.vue'
 import UpdateModal from './components/UpdateModal.vue'
-import { DEFAULT_TAB_CONTENT, COMPILE_MESSAGES, STORAGE_KEYS, AUTO_SAVE_INTERVAL_MS, UPDATE_CHECK_INTERVAL_MS, EXPORT_STATUS_DISPLAY_MS } from './constants'
+import WelcomeScreen from './components/WelcomeScreen.vue'
+import { COMPILE_MESSAGES, STORAGE_KEYS, AUTO_SAVE_INTERVAL_MS, UPDATE_CHECK_INTERVAL_MS, EXPORT_STATUS_DISPLAY_MS } from './constants'
 import { examples } from './examples'
 import type { TabboRPC, LayoutResult, Settings, CompilationError, UpdateStatus, SaveResult } from '../../shared/rpc-types'
 import { addRecentDir } from '../../shared/recent-dirs'
+import { overflowingTitleLines } from '../../shared/title-overflow'
 import type { ScrollPosition } from '../../shared/scroll-sync'
 import { startCaptureWorker } from './composables/useCaptureWorker'
 
@@ -64,15 +67,21 @@ const rpc = Electroview.defineRPC<TabboRPC>({
           case 'revert': revertFile(); break
           case 'exportPdf': exportPdf(); break
           case 'new': clearDraft(); break
+          case 'close': closeDocument(); break
           case 'newFromTemplate': showTemplatePicker.value = true; nextTick(() => templatePickerRoot.value?.focus()); break
           case 'find': editorRef.value?.toggleSearch(); break
-          case 'showHelp': showHelpPanel.value = true; break
+          case 'showHelp': showShortcutsPanel.value = false; showHelpPanel.value = true; break
+          case 'showShortcuts': showHelpPanel.value = false; showShortcutsPanel.value = true; break
+          case 'checkForUpdates': checkForUpdates(true); break
           case 'quitRequested': handleWindowAction('quit'); break
           case 'closeRequested': handleWindowAction('close'); break
         }
       },
       updateStatusChanged: ({ status }) => {
         handleUpdateStatus(status)
+      },
+      openExternalFile: ({ path }) => {
+        void handleExternalOpen(path)
       },
     },
   },
@@ -83,7 +92,12 @@ const electrobun = new Electrobun.Electroview({ rpc })
 const editorRef = ref<{ toggleSearch: () => void; setScrollPosition: (position: ScrollPosition) => void } | null>(null)
 const previewRef = ref<{ setScrollPosition: (position: ScrollPosition) => void } | null>(null)
 
-const tabContent = ref<string>(DEFAULT_TAB_CONTENT)
+const tabContent = ref<string>('')
+// Whether a document is loaded. false → the welcome screen (fresh install, or
+// after Close); true → the editor/preview split. A blank New document and a
+// closed state are otherwise indistinguishable (both empty, no path), so this
+// is an explicit flag, not inferred from content.
+const hasDocument = ref<boolean>(false)
 const layoutResult = ref<LayoutResult | null>(null)
 const isCompiling = ref<boolean>(false)
 const errors = ref<CompilationError[]>([])
@@ -96,6 +110,12 @@ const activeTab = ref<'editor' | 'preview'>('editor')
 const SPLIT_SNAP_PCT = 2 // drag within this of centre locks to exactly 50/50 (double-click also resets)
 const editorWidthPct = ref(readPersistedSplitPct())
 const splitContainer = ref<HTMLElement | null>(null)
+const splitDivider = ref<HTMLElement | null>(null)
+// True while a pointer drag that did NOT start on the resize divider is in
+// progress (dragging the editor scrollbar, selecting text, etc). Disables the
+// divider's pointer-events so its coral hover state doesn't light up as the
+// pointer passes over it mid-drag, when it isn't a usable resize target.
+const isExternalDragging = ref<boolean>(false)
 
 function readPersistedSplitPct(): number {
   try {
@@ -141,6 +161,27 @@ function handlePreviewScrollPosition(position: ScrollPosition): void {
   editorRef.value?.setScrollPosition(position)
 }
 
+function onGlobalPointerDown(event: PointerEvent): void {
+  // Only primary-button drags (scrollbar, text selection). A non-primary press
+  // (e.g. right-click) can have its pointerup swallowed by a context menu, which
+  // would strand the flag true.
+  if (event.button !== 0) return
+  // A drag that starts anywhere other than the divider (e.g. dragging the editor
+  // scrollbar) must not trigger the divider's hover highlight as the pointer
+  // passes over it - it can't be used to resize mid-drag. A drag that DOES start
+  // on the divider leaves this false, so its own resize keeps the highlight.
+  const divider = splitDivider.value
+  if (divider && (event.target === divider || divider.contains(event.target as Node))) return
+  isExternalDragging.value = true
+  const clear = () => {
+    isExternalDragging.value = false
+    window.removeEventListener('pointerup', clear)
+    window.removeEventListener('pointercancel', clear)
+  }
+  window.addEventListener('pointerup', clear)
+  window.addEventListener('pointercancel', clear)
+}
+
 function startSplitDrag(event: PointerEvent): void {
   event.preventDefault()
   const container = splitContainer.value
@@ -184,6 +225,7 @@ const titleBaseDir = ref<string>('') // reactive: whereOptions keeps the open-ti
 const showTemplatePicker = ref<boolean>(false)
 const templatePickerRoot = ref<HTMLElement | null>(null)
 const showHelpPanel = ref<boolean>(false)
+const showShortcutsPanel = ref<boolean>(false)
 const fontSize = ref<number>(12)
 const exportStatus = ref<{ success: boolean; message: string } | null>(null)
 const confirmModalOpen = ref<boolean>(false)
@@ -218,6 +260,16 @@ const errorLines = computed(() =>
   errors.value
     .filter(e => e.line !== undefined)
     .map(e => e.line as number)
+)
+
+// Editor lint: source line numbers of over-wide {}/[] title lines, detected
+// purely from the live layout geometry (a title's title-font x-coordinates
+// stepping backward = the engine's hfill gap went negative = it will collide
+// with its right-aligned segment on export, which titles never wrap around).
+const titleWarnLines = computed(() =>
+  layoutResult.value
+    ? overflowingTitleLines(layoutResult.value, tabContent.value)
+    : []
 )
 
 async function getLayout(): Promise<void> {
@@ -268,8 +320,9 @@ async function getLayout(): Promise<void> {
 // structural: every load path gets it for free rather than re-stating it.
 //   skipCompile (default true): suppress the watcher's debounced compile.
 //     Callers that need a preview drive it themselves (immediate getLayout, or
-//     the launch compile in onMounted); New passes false so the default
-//     document still renders via the watcher.
+//     the launch compile in onMounted); New passes true - an empty buffer must
+//     not compile (zero-length is an engine error), so its preview stays the
+//     placeholder until the first keystroke.
 //   dirty (default false): mark the buffer unsaved. Only a restored draft does.
 function loadFileIntoEditor(
   content: string,
@@ -278,14 +331,30 @@ function loadFileIntoEditor(
   opts: { dirty?: boolean; skipCompile?: boolean } = {},
 ): void {
   const { dirty = false, skipCompile = true } = opts
-  skipNextDirtyMark = true
-  if (skipCompile) skipNextCompile = true
+  // Arm the watcher guards only when the content actually changes. A ref set to
+  // its current value does NOT fire its watcher (Vue skips no-op sets), so arming
+  // on an identical assignment leaves the guard dangling and swallows the user's
+  // next real keystroke. This is the mainline case for New from the welcome
+  // screen, whose buffer is already ''.
+  const contentChanged = content !== tabContent.value
+  skipNextDirtyMark = contentChanged
+  skipNextCompile = contentChanged && skipCompile
+  // Abandon any in-flight/pending compile from the previous content and clear
+  // its transient UI, so a late result can't land on the newly-loaded (or, via
+  // closeDocument, the closed) state. The errors banner sits outside the
+  // hasDocument gate, so a survivor would otherwise overlay the welcome screen
+  // or a blank New doc with nothing scheduled to clear it.
+  currentCompileId++
+  if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
+  isCompiling.value = false
+  errors.value = []
   layoutResult.value = null
   tabContent.value = content
   currentFilename.value = filename
   currentFilePath.value = path
   isDirty.value = dirty
   pendingTargetDir.value = null
+  hasDocument.value = true
 }
 
 function handleKeyboardShortcut(event: KeyboardEvent): void {
@@ -374,18 +443,49 @@ function handleUpdateStatus(status: UpdateStatus): void {
  * Best-effort: a network blip or thrown error is swallowed, the next
  * check (launch or interval) will retry.
  */
-async function checkForUpdates(): Promise<void> {
+/**
+ * Ask the bun side whether an update is available and, if so, route it
+ * through `handleUpdateStatus` so the snooze guard applies identically
+ * whether this fires from the launch check or the periodic re-check.
+ * Best-effort: a network blip or thrown error is swallowed, the next
+ * check (launch or interval) will retry.
+ *
+ * interactive = the menu-driven "Check for Updates…". It differs from the
+ * silent checks in three ways: a flow already on screen is left alone (the
+ * modal is the feedback, and re-checking mid-download would race the
+ * pushed 'checking' status past handleUpdateStatus's phase guard); a found
+ * update clears any snoozed version (an explicit check means the user wants
+ * to see it again - cleared only on success so an offline check can't wipe
+ * a snooze it never re-surfaced); and no-update/failure gets a toast
+ * instead of silence.
+ */
+let updateCheckInFlight = false
+async function checkForUpdates(interactive = false): Promise<void> {
+  if (interactive) {
+    const phase = updateStatus.value?.phase
+    if (phase === 'available' || phase === 'downloading' || phase === 'ready') return
+  }
+  if (updateCheckInFlight) return
+  updateCheckInFlight = true
   try {
     const info = await electrobun.rpc!.request.checkForUpdate({})
     if (info.available) {
+      if (interactive) {
+        try { localStorage.removeItem(STORAGE_KEYS.UPDATE_SNOOZED_VERSION) } catch { /* localStorage unavailable */ }
+      }
       handleUpdateStatus({
         phase: 'available',
         version: info.version,
         changelog: info.changelog,
       })
+    } else if (interactive) {
+      showExportStatus(true, "You're up to date.")
     }
   } catch {
-    // Update check is best-effort; don't surface errors to the user
+    // Silent checks are best-effort; the next launch/interval check retries
+    if (interactive) showExportStatus(false, 'Update check failed.')
+  } finally {
+    updateCheckInFlight = false
   }
 }
 
@@ -448,6 +548,38 @@ async function revertFile(): Promise<void> {
   }
 }
 
+// A file the OS routed to us (Finder double-click / Open With / Dock drop).
+// Mirrors openFile() minus the dialog - the OS already chose the file.
+async function handleExternalOpen(path: string): Promise<void> {
+  // A pending confirm (crash-restore prompt, quit modal) must not be stomped:
+  // askConfirm force-resolves any pending resolver to false, which for the
+  // restore prompt would silently discard the crash-recovery draft. Ignoring
+  // the open is the safer loss - the user can open the file again.
+  if (confirmModalOpen.value || quitModalOpen.value) return
+  try {
+    const file = await electrobun.rpc!.request.readFile({ path })
+    if (!file) {
+      showExportStatus(false, `Could not open ${basename(path)}`)
+      return
+    }
+    if (isDirty.value && !(await askConfirm('You have unsaved changes. Open another file and discard them?'))) {
+      return
+    }
+    loadFileIntoEditor(file.content, file.filename, path)
+    saveToLocalStorage()
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
+    getLayout()
+    try {
+      await electrobun.rpc!.request.updateSettings({ lastOpenedFile: path })
+    } catch {
+      // Settings update is best-effort
+    }
+  } catch (error) {
+    console.error('External open failed:', error)
+    showExportStatus(false, `Could not open ${basename(path)}`)
+  }
+}
+
 // File operations via native RPC
 async function openFile(): Promise<void> {
   if (isDirty.value && !(await askConfirm('You have unsaved changes. Open another file and discard them?'))) {
@@ -477,6 +609,7 @@ async function openFile(): Promise<void> {
 }
 
 async function saveFile(opts: { skipCopyConfirm?: boolean } = {}): Promise<boolean> {
+  if (!hasDocument.value) return false
   try {
     // A save that creates a NEW file (no tracked path yet, or the filename was
     // changed away from the open file's name) writes a copy - confirm first so it
@@ -488,16 +621,29 @@ async function saveFile(opts: { skipCopyConfirm?: boolean } = {}): Promise<boole
       targetDir: pendingTargetDir.value,
     })
     const targetIsNewFile = target !== null && target !== currentFilePath.value
-    // One confirm that states the real consequence: replacing an existing file, or a plain copy.
-    // Checking existence here (not relying on bun's second needs-overwrite-confirm round-trip) avoids
-    // a fragile two-modal sequence and never lets a clobber read as a benign "save a copy".
+    // One confirm that states the real consequence. Checking existence here (not
+    // relying on bun's second needs-overwrite-confirm round-trip) avoids a fragile
+    // two-modal sequence and never lets a clobber read as a benign save.
     let overwriteConfirmed = false
     if (targetIsNewFile && !opts.skipCopyConfirm) {
       const willReplace = target ? await electrobun.rpc!.request.fileExists({ path: target }) : false
-      const ok = await askConfirm(
-        willReplace ? `A file already exists at ${target}. Replace it?` : `Save a copy to ${target}?`,
-        willReplace ? 'Replace' : 'Save copy',
-      )
+      // "Save a copy" only fits copying an already-tracked file to a new path. A
+      // first save of a never-saved (untitled) document has no original to copy,
+      // so it reads as a plain "Save". A pre-existing target overrides both.
+      const isFirstSave = currentFilePath.value === null
+      let message: string
+      let primaryLabel: string
+      if (willReplace) {
+        message = `A file already exists at ${target}. Replace it?`
+        primaryLabel = 'Replace'
+      } else if (isFirstSave) {
+        message = `Save to ${target}?`
+        primaryLabel = 'Save'
+      } else {
+        message = `Save a copy to ${target}?`
+        primaryLabel = 'Save copy'
+      }
+      const ok = await askConfirm(message, primaryLabel)
       if (!ok) return false
       overwriteConfirmed = willReplace
     }
@@ -561,6 +707,7 @@ function showExportStatus(success: boolean, message: string): void {
 }
 
 async function exportPdf(): Promise<void> {
+  if (!hasDocument.value) return
   try {
     const result = await electrobun.rpc!.request.compileToPdf({
       content: tabContent.value,
@@ -682,7 +829,7 @@ const whereOptions = computed(() => {
   return opts
 })
 
-// Reopen the last file from disk, or leave the default blank document as-is.
+// Reopen the last file from disk, or leave the welcome screen (no document) as-is.
 // `settings` is passed in from onMounted - do NOT call getSettings again here.
 async function reopenLast(settings: Settings): Promise<void> {
   const lastPath = settings.lastOpenedFile
@@ -696,12 +843,12 @@ async function reopenLast(settings: Settings): Promise<void> {
     // compile: the launch compile in onMounted renders the reopened file.
     loadFileIntoEditor(file.content, file.filename, lastPath)
   } catch {
-    // File unreadable - leave the default blank document
+    // File unreadable - leave the welcome screen (no document loaded)
   }
 }
 
 // On mount: if a draft exists (⇒ genuine unsaved work from an unclean exit), offer
-// to restore it; otherwise reopen the last file from disk (or stay blank).
+// to restore it; otherwise reopen the last file from disk (or stay on the welcome screen).
 // `settings` is passed in from onMounted - do NOT call getSettings again here.
 async function restoreSession(settings: Settings): Promise<void> {
   let draftContent: string | null = null
@@ -754,10 +901,33 @@ async function clearDraft(): Promise<void> {
   } catch {
     // Settings update is best-effort; don't block the New action
   }
-  // skipCompile:false - unlike the other load paths, New drives no explicit
-  // compile, so the content watcher must run the debounced compile to render
-  // the default document.
-  loadFileIntoEditor(DEFAULT_TAB_CONTENT, 'untitled.tab', null, { skipCompile: false })
+  // New creates a blank untitled buffer. skipCompile:true - compiling empty
+  // content is a hard engine error ("zero length file"); the empty-preview
+  // placeholder stands in until the first keystroke (which compiles).
+  loadFileIntoEditor('', 'untitled.tab', null, { skipCompile: true })
+}
+
+// Close the current document and return to the welcome screen. Mirrors New's
+// discard-confirm + draft/lastOpenedFile clearing, but drops hasDocument.
+// loadFileIntoEditor owns the guard-before-assign reset (content, filename,
+// path, dirty, layout) - correct even for the no-op empty case - and sets
+// hasDocument true; flipping it false immediately after is synchronous, so Vue
+// never renders the intermediate editor state.
+async function closeDocument(): Promise<void> {
+  if (!hasDocument.value) return
+  if (isDirty.value && !(await askConfirm('Discard unsaved changes?'))) {
+    return
+  }
+  clearDraftStorage()
+  // Clear lastOpenedFile so a relaunch stays on the welcome screen rather than
+  // reopening the file just closed.
+  try {
+    await electrobun.rpc!.request.updateSettings({ lastOpenedFile: null })
+  } catch {
+    // Settings update is best-effort; don't block Close
+  }
+  loadFileIntoEditor('', 'untitled.tab', null, { skipCompile: true })
+  hasDocument.value = false
 }
 
 function askQuitChoice(): Promise<'save' | 'discard' | 'cancel'> {
@@ -855,6 +1025,7 @@ watch(tabContent, () => {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleKeyboardShortcut)
+  window.addEventListener('pointerdown', onGlobalPointerDown, true)
 
   // Load persisted settings - captured here and threaded into restoreSession
   // so getSettings is only called once.
@@ -878,7 +1049,7 @@ onMounted(async () => {
   // Single initial compile for whatever was loaded by restoreSession.
   // The skipNextCompile guard on the content watcher prevents the watcher from
   // double-compiling, so this setTimeout is the only compile that fires on launch.
-  setTimeout(() => getLayout(), 100)
+  setTimeout(() => { if (hasDocument.value) getLayout() }, 100)
 
   // Check for updates after a short delay so the initial layout RPC has settled.
   // Fires silently on dev channel (bun side returns available: false immediately).
@@ -894,7 +1065,7 @@ onMounted(async () => {
   updateCheckTimer = setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS)
 
   stopCaptureWorker = startCaptureWorker({
-    setLayout: (l) => { layoutResult.value = l },
+    setLayout: (l) => { layoutResult.value = l; hasDocument.value = true },
     setFilename: (f) => { currentFilename.value = f },
     capturePreviewPages,
   })
@@ -902,6 +1073,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyboardShortcut)
+  window.removeEventListener('pointerdown', onGlobalPointerDown, true)
   window.removeEventListener('blur', saveToLocalStorage)
   if (debounceTimer) clearTimeout(debounceTimer)
   if (autoSaveTimer) clearInterval(autoSaveTimer)
@@ -918,7 +1090,7 @@ onUnmounted(() => {
 <template>
   <div class="h-screen flex flex-col bg-app">
     <!-- Mobile tab navigation -->
-    <div class="md:hidden bg-head border-b border-hairline">
+    <div v-if="hasDocument" class="md:hidden bg-head border-b border-hairline">
       <div class="flex">
         <button
           @click="activeTab = 'editor'"
@@ -948,7 +1120,7 @@ onUnmounted(() => {
     <main ref="splitContainer" class="flex-1 flex overflow-hidden relative">
       <div
         v-if="errors.length > 0"
-        class="absolute top-0 left-0 right-0 z-10 bg-error-surface border border-error-soft/45 rounded-lg px-4 py-2 shadow-sm"
+        class="absolute top-0 left-0 right-0 z-20 bg-error-surface border border-error-soft/45 rounded-lg px-4 py-2 shadow-sm"
       >
         <div v-for="(error, index) in errors" :key="index" class="text-error-ink text-sm">
           <span v-if="error.line" class="font-mono text-error-soft">Line {{ error.line }}: </span>{{ error.message }}
@@ -956,13 +1128,14 @@ onUnmounted(() => {
       </div>
       <div
         v-if="exportStatus"
-        class="absolute top-0 left-0 right-0 z-10 px-4 py-2 shadow-sm text-sm"
+        class="absolute top-0 left-0 right-0 z-20 px-4 py-2 shadow-sm text-sm"
         :class="exportStatus.success
           ? 'bg-raise border border-hairline text-ink'
           : 'bg-error-surface border border-error-soft/45 text-error-ink'"
       >
         {{ exportStatus.message }}
       </div>
+      <template v-if="hasDocument">
       <div
         class="w-full md:w-[var(--editor-width)] md:shrink-0 bg-pane"
         :style="{ '--editor-width': editorWidthPct + '%' }"
@@ -972,6 +1145,7 @@ onUnmounted(() => {
           ref="editorRef"
           v-model="tabContent"
           :error-lines="errorLines"
+          :warn-lines="titleWarnLines"
           :font-size="fontSize"
           @scroll-position="handleEditorScrollPosition"
         >
@@ -1021,7 +1195,11 @@ onUnmounted(() => {
                     >
                       <option v-for="dir in whereOptions" :key="dir" :value="dir">{{ tildify(dir) }}</option>
                     </select>
-                    <button type="button" class="title-menu-choose" @click="chooseFolderClick">Choose…</button>
+                    <button type="button" class="title-menu-choose flex items-center justify-center" @click="chooseFolderClick" aria-label="Choose folder" title="Choose folder…">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h9a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </template>
@@ -1031,7 +1209,9 @@ onUnmounted(() => {
       </div>
       <!-- Draggable divider (desktop only); mobile switches panes via the tab bar -->
       <div
-        class="hidden md:block shrink-0 w-px relative bg-hairline hover:bg-accent cursor-col-resize transition-colors before:content-[''] before:absolute before:inset-y-0 before:-inset-x-1"
+        ref="splitDivider"
+        class="hidden md:block shrink-0 w-px relative z-10 bg-hairline hover:bg-accent cursor-col-resize transition-colors before:content-[''] before:absolute before:inset-y-0 before:-inset-x-1"
+        :class="{ 'pointer-events-none': isExternalDragging }"
         @pointerdown="startSplitDrag"
         @dblclick="resetSplit"
         title="Drag to resize · double-click to reset"
@@ -1049,6 +1229,13 @@ onUnmounted(() => {
           @scroll-position="handlePreviewScrollPosition"
         />
       </div>
+      </template>
+      <WelcomeScreen
+        v-else
+        @new="clearDraft"
+        @open="openFile"
+        @template="showTemplatePicker = true"
+      />
     </main>
 
     <!-- New from Template picker (opened from the File menu) -->
@@ -1075,6 +1262,8 @@ onUnmounted(() => {
     </div>
 
     <HelpPanel :is-open="showHelpPanel" @close="showHelpPanel = false" />
+
+    <ShortcutsPanel :is-open="showShortcutsPanel" @close="showShortcutsPanel = false" />
 
     <UpdateModal
       :status="updateStatus"
@@ -1108,7 +1297,7 @@ onUnmounted(() => {
           <button
             ref="confirmPrimaryBtn"
             @click="resolveConfirm(true)"
-            class="px-3 py-1.5 text-sm font-semibold bg-error-soft text-[#141414] hover:bg-error-soft/90 rounded transition-colors"
+            class="px-3 py-1.5 text-sm font-semibold bg-error-soft text-on-accent hover:bg-error-soft/90 rounded transition-colors"
           >
             {{ confirmPrimaryLabel }}
           </button>
@@ -1144,7 +1333,7 @@ onUnmounted(() => {
           <button
             ref="quitSaveBtn"
             @click="resolveQuit('save')"
-            class="px-3 py-1.5 text-sm font-semibold bg-accent text-[#141414] hover:bg-accent-soft rounded transition-colors"
+            class="px-3 py-1.5 text-sm font-semibold bg-accent text-on-accent hover:bg-accent-soft rounded transition-colors"
           >
             Save
           </button>

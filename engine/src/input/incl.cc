@@ -54,7 +54,7 @@ void include(i_buf *ib, struct file_info *f, char file [])
         free(newf);
         return;
     }
-    strcpy (newf->file, file);
+    snprintf (newf->file, BUFSIZ, "%s", file);  /* bound: newf->file is malloc(BUFSIZ) above */
     newf->out_file  = (char *)malloc( BUFSIZ );
     if (newf->out_file == NULL) {
         dbg0(Error, "tab: include: malloc failed for output file name\n");

@@ -1,0 +1,41 @@
+%barnums fixture - pins below-staff bar numbering.
+%-C numbers every 5th bar (so a single-digit "5" and a two-digit "10"
+%both appear); a diapason (/a) sits below the staff at each numbered bar,
+%reproducing the bar-number / bourdon collision that json_print::p_num
+%must place correctly - push the number below the staff, centre the digits
+%over the barline, and restore the note font afterwards.
+
+-C
+
+b
+1 a   c
+2 c   e
+b
+1 d   f
+2 a   c
+b
+1 c   a
+2 e   d
+b
+1 f   c
+2 a   e
+b
+1 a    /a
+2 c   e
+b
+1 d   a
+2 c   e
+b
+1 a   c
+2 f   d
+b
+1 c   e
+2 a   c
+b
+1 e   a
+2 d   f
+b
+1 a    /a
+2 c   e
+b
+e

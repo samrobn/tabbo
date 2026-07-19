@@ -92,6 +92,55 @@ def detect_font_size(eps_dir: str, font_name: str, pk_to_unicode: dict[int, int]
     return 9.0
 
 
+# mf2pt1 traces METAFONT pen strokes into a single self-intersecting outline
+# per glyph (the pen's stroke envelope, not a separate outer+counter contour
+# pair). Browsers/Skia render an SVG <text> glyph fine in isolation under the
+# nonzero fill rule, but when that self-intersecting contour overlaps other
+# opaque content (e.g. a staff-line rule drawn behind or in front of it in the
+# live preview), the overlap interacts badly with the renderer's coverage
+# computation and produces large white knockouts inside the glyph's ink
+# (task 20260718-E65Q). removeOverlap() decomposes the self-intersecting
+# contour into proper simple (non-self-intersecting) contours, which the PDF
+# export path never needed because it paints PK glyphs as opaque bitmaps.
+#
+# removeOverlap()'s boolean union leaves sub-pixel sliver contours at the
+# former self-intersection points (near-tangent numerical noise, not real
+# geometry -- verified by area: real contours measure in the hundreds of
+# thousands of square units at 1000 UPM, slivers measure under 5). Drop them
+# or they render as stray hairline artefacts.
+SLIVER_AREA_THRESHOLD = 5.0
+
+
+def _contour_area(contour) -> float:
+    """Shoelace-formula area of a FontForge contour, in font units²."""
+    points = [(p.x, p.y) for p in contour]
+    area = 0.0
+    for i in range(len(points)):
+        x1, y1 = points[i]
+        x2, y2 = points[(i + 1) % len(points)]
+        area += x1 * y2 - x2 * y1
+    return abs(area) / 2.0
+
+
+def clean_glyph_overlap(g: "fontforge.glyph") -> None:
+    """
+    Remove self-intersections from a glyph's outline in place, dropping the
+    numerical-noise slivers removeOverlap() leaves behind. Must run before
+    correctDirection() re-normalises the resulting simple contours' winding.
+    """
+    had_contours = len(g.foreground) > 0
+    g.removeOverlap()
+    layer = g.foreground
+    sliver_indices = [i for i, c in enumerate(layer) if _contour_area(c) < SLIVER_AREA_THRESHOLD]
+    for i in reversed(sliver_indices):
+        del layer[i]
+
+    if had_contours and len(layer) == 0:
+        raise RuntimeError(f"clean_glyph_overlap emptied glyph {g.glyphname!r} in font {g.font.fontname!r}")
+
+    g.foreground = layer
+
+
 def load_mapping(mapping_path: str) -> dict[int, int]:
     """
     Return {pk_code: unicode_codepoint} from pua-mapping.json.
@@ -188,6 +237,11 @@ def main() -> None:
             # Must be done before correctDirection so winding-direction checks
             # operate on the final coordinates.
             g.transform(scale_mat)
+
+            # Decompose mf2pt1's self-intersecting pen-stroke contour into
+            # simple contours before normalising winding direction (see
+            # clean_glyph_overlap docstring -- task 20260718-E65Q).
+            clean_glyph_overlap(g)
 
             # Normalise path winding universally. mf2pt1 logs ~30 is_clockwise()
             # failures; correctDirection() handles those and any silently-wrong paths.

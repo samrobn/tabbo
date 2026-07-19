@@ -28,6 +28,7 @@ extern double staff_len;  /* sizes.cc — content width in inches */
 /* ---- forward declared in tab.h / dvi.h ---- */
 int inch_to_dvi(double inch);
 int inch_to_dvi_unscaled(double inch);
+int pt_to_dvi(double pt);
 int str_to_dvi(const char *string);
 
 /* ---- format_page forward declaration ---- */
@@ -51,6 +52,7 @@ json_print::json_print(font_list *font_array[], file_info *f)
     run_font = -1;
     run_x = run_y = 0;
     run_last_advance = 0;
+    run_highlight = HL_NONE;
 
     worker_mode    = (f->m_flags & WORKER_MODE) != 0;
     abandon_output = false;
@@ -62,6 +64,23 @@ json_print::json_print(font_list *font_array[], file_info *f)
      * even when -R reduces red (font scaling must not shrink the page). */
     page_top_dvi   = inch_to_dvi_unscaled(11.0);          /* US Letter height */
     page_width_dvi = inch_to_dvi_unscaled(8.5);           /* US Letter width */
+
+    /* Pagination v-register origin: the top of the printable area, ~0.58in
+     * below the physical top edge (the reserved top margin). Mirrors
+     * ps_print::ps_print (ps_print.cc:49-70) verbatim so both backends give
+     * each page the same vertical budget and paginate identically. Also the
+     * dvi_v_to_y origin (dvi_v_to_y = page_v_origin - v), so rendered system
+     * positions are unchanged by the pagination-origin move -- only the
+     * per-page budget changes. Distinct from page_top_dvi (physical paper
+     * height), which remains only the reported page_height. Anchoring
+     * dvi_v_to_y on page_top_dvi instead would double the top margin: the
+     * SVG renderer (layout-render.ts) already applies a top_margin translate. */
+    {
+        int top = 98670000;
+        if ((f->m_flags & A4) && !(f->flags & ROTATE)) top += 6563672;
+        top += pt_to_dvi((double)(72 - f->top_margin));
+        page_v_origin = top;
+    }
     left_margin_dvi = inch_to_dvi((double)f->left_margin / 72.0);
     top_margin_dvi  = inch_to_dvi((double)f->top_margin  / 72.0);
     staff_len_dvi   = inch_to_dvi(staff_len);
@@ -98,7 +117,7 @@ json_print::json_print(font_list *font_array[], file_info *f)
 
     /* Initialise dvi position at top of page (mirrors ps_print::init_hv) */
     dvi_h = 0;
-    dvi_v = page_top_dvi;
+    dvi_v = page_v_origin;
 }
 
 json_print::~json_print()
@@ -171,7 +190,22 @@ void json_print::record_font(int font_id)
         }
         fd.type     = "text";
         fd.has_size = true;
-        fd.size_pt  = f_i->font_sizes[font_id];
+        if (font_id == 7 && f_a && f_a[font_id]) {
+            /* font_sizes[7] is permanently 0.0 (see main.cc/worker.cc "not
+             * used" comment) -- reading it here zeroes out font-size in the
+             * JSON manifest, making page-number text_runs (format_pagenum
+             * uses font 7) invisible in the live preview. f_a[font_id]->size
+             * isn't right either: it bakes in the TFM scale (10.0 * 1.0/red),
+             * which varies with -R reduction flags. NUMFONT: PS hardcodes
+             * 12.0, red-invariant - ps_print.cc case NUMFONT. */
+            fd.size_pt = 12.0;
+        } else {
+            /* Mirror ps_print::ps_command (case SMALL/ROMAN/BIGIT/MED/ITAL/
+             * MUSICS): every text font except NUMFONT emits font_sizes[j] *
+             * red. Omitting * red here overstates preview text size by
+             * 1/red whenever a -R reduction flag is active. */
+            fd.size_pt = f_i->font_sizes[font_id] * red;
+        }
     }
 
     font_manifest.push_back(fd);
@@ -196,9 +230,14 @@ void json_print::flush_run()
 
     JsonPrimitive p;
     p.type       = JPRIM_TEXT_RUN;
+    p.highlight_kind = run_highlight;
     p.run_font_id = run_font;
     p.run_x      = run_x;
     p.run_y      = dvi_v_to_y(run_y);
+    /* Run width = cursor after the last char minus the run start. Lets the
+     * editor compare rendered extents (not just start positions) to catch a
+     * title's tail overlapping its right-aligned segment. */
+    p.run_width  = run_last_advance - run_x;
     p.run_text   = run_text;
     emit_primitive(p);
 }
@@ -262,6 +301,21 @@ void json_print::emit_primitive(const JsonPrimitive &p)
     current_system().primitives.push_back(p);
 }
 
+/* Mirror ps_print's highlight handling (put_a_char/set_a_char/p_put_rule):
+ * when the author has marked an element with Q/@, stamp the emitted primitive
+ * with its colour so the preview can render it like the exported PDF. Paren
+ * highlight draws literal parens, not a colour, so it maps to HL_NONE here. */
+HighlightKind json_print::current_highlight() const
+{
+    if (highlight != On) return HL_NONE;
+    switch (highlight_type) {
+    case Red:  return HL_RED;
+    case Blue: return HL_BLUE;
+    case Gray: return HL_GRAY;
+    default:   return HL_NONE;  /* Paren: handled as glyphs, not a colour */
+    }
+}
+
 /* ================================================================
  * do_page — called by the pass2/format_page loop.
  * Each call is one page.  We open a new page context, run format_page,
@@ -279,7 +333,7 @@ int json_print::do_page(i_buf *i_b, font_list *f_l[])
 
     /* Reset DVI position to top of page (mirrors ps_print::init_hv) */
     dvi_h = 0;
-    dvi_v = page_top_dvi;
+    dvi_v = page_v_origin;
 
     return format_page(this, i_b, f_l, f_i);
 }
@@ -379,11 +433,42 @@ void json_print::put_a_char(unsigned char c)
             char_code = (int)(unsigned char)c;
         }
     } else {
-        char_code = (int)(unsigned char)c;
+        /* Text fonts: title.cc/special() emits accent marks as isolated
+         * glyphs. The JSON path always runs with the PS flag CLEAR (set_json
+         * and worker mode both clear it), so the live slots are the OT1
+         * metafont ones (0022 grave, 0023 acute, ...); the Adobe
+         * StandardEncoding slots (0301-0317) are kept for the -json -P
+         * flag-order edge where the PS branch can still fire. Map both to
+         * Unicode SPACING accents (Adobe glyph list) so a Unicode body font
+         * renders the mark, not a control char or Latin-1 letter (e.g. OT1
+         * dieresis 0177 is DEL; StandardEncoding acute 0302 renders U+00C2).
+         * Spacing forms, not combining marks: each glyph primitive renders
+         * standalone, and the engine has already positioned the mark over
+         * its base with move commands - the same semantics as the PS
+         * spacing-accent glyphs, so positioning matches PS output. */
+        /* Case pairs: OT1 metafont slot (non-PS branch - the live JSON
+         * path), then Adobe StandardEncoding slot (PS branch). Circumflex
+         * and tilde use ASCII forms - the Spacing Modifier Letters block
+         * (U+02C6/U+02DC) is tofu in some body fonts. */
+        switch ((int)(unsigned char)c) {
+        case 0022: case 0301: char_code = 0x0060; break; /* grave */
+        case 0023: case 0302: char_code = 0x00B4; break; /* acute */
+        case 0024: case 0317: char_code = 0x02C7; break; /* caron */
+        case 0025: case 0306: char_code = 0x02D8; break; /* breve */
+        case 0026: case 0305: char_code = 0x00AF; break; /* macron */
+        case 0030: case 0313: char_code = 0x00B8; break; /* cedilla */
+        case 0136: case 0303: char_code = 0x005E; break; /* circumflex */
+        case 0137: case 0307: char_code = 0x02D9; break; /* dotaccent */
+        case 0175: case 0315: char_code = 0x02DD; break; /* hungarumlaut */
+        case 0176: case 0304: char_code = 0x007E; break; /* tilde */
+        case 0177: case 0310: char_code = 0x00A8; break; /* dieresis */
+        default:   char_code = (int)(unsigned char)c; break;
+        }
     }
 
     JsonPrimitive p;
     p.type           = JPRIM_GLYPH;
+    p.highlight_kind = current_highlight();
     p.glyph_font_id  = curfont;
     p.glyph_char_code = char_code;
     p.glyph_x        = dvi_h;
@@ -449,7 +534,11 @@ void json_print::set_a_char(unsigned char c)
         if (run_font != curfont)
             flush_needed = true;
         else
-            flush_needed = (dvi_h != run_last_advance);
+            /* Also flush on a highlight change so a run never mixes colours —
+             * keeps each emitted text_run uniformly coloured (e.g. a highlighted
+             * two-digit fret's tens digit, drawn on font 0 via set_a_char). */
+            flush_needed = (dvi_h != run_last_advance)
+                        || (run_highlight != current_highlight());
     }
 
     if (!run_open || flush_needed) {
@@ -461,6 +550,7 @@ void json_print::set_a_char(unsigned char c)
         run_y      = dvi_v;
         run_text.clear();
         run_last_advance = dvi_h;  /* expected position = current position */
+        run_highlight = current_highlight();
     }
 
     /* Resolve character to Unicode codepoint / UTF-8.
@@ -531,8 +621,16 @@ void json_print::set_a_char(unsigned char c)
         /* inverted ? — U+00BF */
         json_utf8_codepoint(run_text, 0x00BF);
     } else if (c == 0365) {
-        /* special space-like char, treat as space */
-        run_text += ' ';
+        /* dotless i under an accent, PS branch (title.cc) - StandardEncoding
+         * slot 0365 -> U+0131. Advance width above already uses get_width('i'). */
+        json_utf8_codepoint(run_text, 0x0131);
+    } else if (c == 020) {
+        /* dotless i under an accent, non-PS branch (the live JSON path) -
+         * OT1 slot 020 -> U+0131. */
+        json_utf8_codepoint(run_text, 0x0131);
+    } else if (c == 021) {
+        /* dotless j, non-PS branch - OT1 slot 021 -> U+0237. */
+        json_utf8_codepoint(run_text, 0x0237);
     } else if ((unsigned char)c < 0x80) {
         run_text += (char)c;
     } else {
@@ -616,6 +714,7 @@ void json_print::p_put_rule(int w, int h)
 
     JsonPrimitive p;
     p.type        = JPRIM_RULE;
+    p.highlight_kind = current_highlight();
     p.rule_x      = dvi_h;
     p.rule_y      = dvi_v_to_y(dvi_v) - h;   // top of rule (SVG rect semantics); PS baseline is bottom
     p.rule_width  = w;
@@ -707,7 +806,7 @@ void json_print::do_rtie(int bloc, int eloc)
  * Slash / beam marks
  * ================================================================ */
 
-void json_print::put_slash(int bloc, int eloc, int count, struct file_info * /*f*/)
+void json_print::put_slash(int bloc, int eloc, int count, struct file_info *f)
 {
     flush_run();
     ensure_system_open();
@@ -723,6 +822,12 @@ void json_print::put_slash(int bloc, int eloc, int count, struct file_info * /*f
     p.slash_y     = dvi_v_to_y(dvi_v);
     p.slash_width = save_h[eloc] - save_h[bloc];
     p.slash_count = count;
+    /* Mirror ps_print::put_slash's thickness rule so the renderer draws
+     * from the same source of truth. Nothing in the fork (or upstream)
+     * currently sets LSA_FORM - no CLI flag or directive - so the 0.023
+     * branch is unreachable from input today; carried for fidelity. */
+    p.slash_thickness = str_to_dvi("0.005 in");
+    if (f->flags & LSA_FORM) p.slash_thickness = str_to_dvi("0.023 in");
     emit_primitive(p);
 }
 
@@ -863,18 +968,37 @@ int json_print::more()
 /* ================================================================
  * p_num — bar number (same as ps_print: print into the font-1 font)
  * We delegate to set_a_char for each digit.
+ *
+ * Mirrors ps_print::p_num's three steps, which this was previously
+ * missing: push the cursor below the staff (movev), centre the digits
+ * over the barline (moveh by half the string width), and restore font 0
+ * afterwards (push/pop only save dvi_h/dvi_v, not curfont — matches
+ * ps_print's own comment "was 1 wbc july 2019" / restore call).  Without
+ * the movev the number rendered ~1 staff-line-gap below the staff instead
+ * of ps_print's ~0.18in, close enough to collide with a bourdon on the
+ * numbered system's own tail row (task 20260718-7126).
  * ================================================================ */
 
 void json_print::p_num(int n)
 {
     char string[16];
     int i;
+    double total_width = 0.0;
     snprintf(string, sizeof(string), "%d", n);
     push();
+    movev("0.18 in");
+
     use_font(1);
     for (i = 0; i < (int)sizeof(string) && string[i]; i++)
+        total_width += f_a[curfont]->fnt->get_width(string[i]);
+
+    moveh(-total_width / 2.0 + 0.018);
+
+    for (i = 0; i < (int)sizeof(string) && string[i]; i++)
         set_a_char((unsigned char)string[i]);
+
     flush_run();
+    use_font(0);
     pop();
 }
 
@@ -913,6 +1037,17 @@ static void append_int(std::string &out, int v)
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", v);
     out += buf;
+}
+
+/* JSON name for an editorial highlight colour, or 0 for HL_NONE (field omitted). */
+static const char *highlight_name(HighlightKind hk)
+{
+    switch (hk) {
+    case HL_GRAY: return "gray";
+    case HL_RED:  return "red";
+    case HL_BLUE: return "blue";
+    default:      return 0;
+    }
 }
 
 static void append_double(std::string &out, double v)
@@ -995,6 +1130,9 @@ void json_print::write_json(const char *fname)
                     append_int(out, prim.glyph_char_code);
                     out += ", \"x\": "; append_int(out, prim.glyph_x);
                     out += ", \"y\": "; append_int(out, prim.glyph_y);
+                    if (const char *hl = highlight_name(prim.highlight_kind)) {
+                        out += ", \"highlight\": \""; out += hl; out += "\"";
+                    }
                     out += "}";
                     break;
 
@@ -1003,6 +1141,10 @@ void json_print::write_json(const char *fname)
                     append_int(out, prim.run_font_id);
                     out += ", \"x\": "; append_int(out, prim.run_x);
                     out += ", \"y\": "; append_int(out, prim.run_y);
+                    out += ", \"width\": "; append_int(out, prim.run_width);
+                    if (const char *hl = highlight_name(prim.highlight_kind)) {
+                        out += ", \"highlight\": \""; out += hl; out += "\"";
+                    }
                     out += ", \"text\": ";
                     json_string(out, prim.run_text.c_str());
                     out += "}";
@@ -1014,6 +1156,9 @@ void json_print::write_json(const char *fname)
                     out += ", \"y\": "; append_int(out, prim.rule_y);
                     out += ", \"width\": "; append_int(out, prim.rule_width);
                     out += ", \"height\": "; append_int(out, prim.rule_height);
+                    if (const char *hl = highlight_name(prim.highlight_kind)) {
+                        out += ", \"highlight\": \""; out += hl; out += "\"";
+                    }
                     out += "}";
                     break;
 
@@ -1045,6 +1190,7 @@ void json_print::write_json(const char *fname)
                     out += ", \"y\": "; append_int(out, prim.slash_y);
                     out += ", \"width\": "; append_int(out, prim.slash_width);
                     out += ", \"count\": "; append_int(out, prim.slash_count);
+                    out += ", \"thickness\": "; append_int(out, prim.slash_thickness);
                     out += "}";
                     break;
 
@@ -1198,6 +1344,9 @@ void json_print::write_json_worker(const std::vector<CompilationError> &errors)
                     out += ",\"char_code\":"; append_int(out, prim.glyph_char_code);
                     out += ",\"x\":"; append_int(out, prim.glyph_x);
                     out += ",\"y\":"; append_int(out, prim.glyph_y);
+                    if (const char *hl = highlight_name(prim.highlight_kind)) {
+                        out += ",\"highlight\":\""; out += hl; out += "\"";
+                    }
                     out += "}";
                     break;
 
@@ -1206,6 +1355,10 @@ void json_print::write_json_worker(const std::vector<CompilationError> &errors)
                     append_int(out, prim.run_font_id);
                     out += ",\"x\":"; append_int(out, prim.run_x);
                     out += ",\"y\":"; append_int(out, prim.run_y);
+                    out += ",\"width\":"; append_int(out, prim.run_width);
+                    if (const char *hl = highlight_name(prim.highlight_kind)) {
+                        out += ",\"highlight\":\""; out += hl; out += "\"";
+                    }
                     out += ",\"text\":";
                     json_string(out, prim.run_text.c_str());
                     out += "}";
@@ -1217,6 +1370,9 @@ void json_print::write_json_worker(const std::vector<CompilationError> &errors)
                     out += ",\"y\":"; append_int(out, prim.rule_y);
                     out += ",\"width\":"; append_int(out, prim.rule_width);
                     out += ",\"height\":"; append_int(out, prim.rule_height);
+                    if (const char *hl = highlight_name(prim.highlight_kind)) {
+                        out += ",\"highlight\":\""; out += hl; out += "\"";
+                    }
                     out += "}";
                     break;
 
@@ -1248,6 +1404,7 @@ void json_print::write_json_worker(const std::vector<CompilationError> &errors)
                     out += ",\"y\":"; append_int(out, prim.slash_y);
                     out += ",\"width\":"; append_int(out, prim.slash_width);
                     out += ",\"count\":"; append_int(out, prim.slash_count);
+                    out += ",\"thickness\":"; append_int(out, prim.slash_thickness);
                     out += "}";
                     break;
 

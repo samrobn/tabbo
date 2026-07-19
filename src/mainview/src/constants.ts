@@ -1,10 +1,3 @@
-export const DEFAULT_TAB_CONTENT = `% Simple lute tablature example
-b
-1-abc dDo
-2-efg hG
-Y-
-e`;
-
 export const COMPILE_MESSAGES = {
 	COMPILING: "Compiling...",
 	COMPILATION_FAILED: "Compilation failed",

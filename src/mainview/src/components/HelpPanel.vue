@@ -150,7 +150,7 @@ const sections = [
               <p class="text-xs text-ink-soft">
                 Based on the original Tab typesetter by Wayne Cripps.
                 <a
-                  href="https://www.cs.dartmouth.edu/~wbc/lute/AboutTab.html"
+                  href="https://web.archive.org/web/20260420024741/https://www.cs.dartmouth.edu/~wbc/lute/AboutTab.html"
                   target="_blank"
                   rel="noopener"
                   class="text-accent hover:underline"

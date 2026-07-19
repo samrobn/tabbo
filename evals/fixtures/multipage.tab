@@ -1,0 +1,129 @@
+%multipage fixture - pins PS/JSON pagination parity.
+%Nine identical sections auto-paginate (no explicit page breaks anywhere,
+%so the page boundary is decided solely by more()). Section heights are
+%tuned so the last section that just fits under PS's top-of-page origin is
+%exactly the one an over-large JSON budget would pull up a page.
+%With the pre-fix JSON origin (full paper height, no top-margin deduction)
+%JSON gets ~0.58in more budget per page and over-fills to 2 pages; the PS
+%pipeline paginates to 3. Post-fix, json_print starts each page at the
+%ps_top_of_page equivalent, so both pipelines produce 3 pages.
+
+{Multipage pagination fixture}
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+
+{Section}
+
+b
+1a c e
+x c e a
+2d f a
+x e a c
+3f a d
+x a c e
+4c e a
+x e a c
+b
+e

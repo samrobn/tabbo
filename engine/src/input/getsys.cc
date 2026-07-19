@@ -996,62 +996,62 @@ int getsystem(file_in *fi, i_buf *ib, struct file_info *f,char buf[])
   done:
 
     if (barline) {
-      strcpy(b_tmp, "b");
+      snprintf (b_tmp, sizeof(b_tmp), "%s", "b");
       barline = 0;
 	  
       if (hushbar) {
 	// Mstore( ib, l_p, (unsigned char *)"b!         ", f);
-	strcat(b_tmp, "!");
+	strncat (b_tmp, "!", sizeof(b_tmp) - strlen(b_tmp) - 1);
 	hushbar =0;
       }
       if (tie) {
 	// Mstore( ib, l_p, (unsigned char *)"bT         ", f);
-	strcat(b_tmp, "T");
+	strncat (b_tmp, "T", sizeof(b_tmp) - strlen(b_tmp) - 1);
 	tie = 0;
       }
       if (dimline) {
 	// Mstore( ib, l_p, (unsigned char *)"bQ         ", f);
-	strcat(b_tmp, "Q");
+	strncat (b_tmp, "Q", sizeof(b_tmp) - strlen(b_tmp) - 1);
 	dimline = 0;
       }
       if (nocountbar) {
 	// Mstore( ib, l_p, (unsigned char *)"bX         ", f);
-	strcat(b_tmp, "X");
+	strncat (b_tmp, "X", sizeof(b_tmp) - strlen(b_tmp) - 1);
 	nocountbar = 0;
       }
       if (nocountdimbar) {
 	// Mstore( ib, l_p, (unsigned char *)"bL         ", f);
-	strcat(b_tmp, "L");
+	strncat (b_tmp, "L", sizeof(b_tmp) - strlen(b_tmp) - 1);
 	nocountdimbar = 0;
       }
       if (orig) {
 	// Mstore( ib, l_p, (unsigned char *)  "bv         ", f);  // why the abc ??? wbc jan 2025
-	strcat(b_tmp, "v");
+	strncat (b_tmp, "v", sizeof(b_tmp) - strlen(b_tmp) - 1);
 	orig = 0;
       }
       if (Orig) {
 	// Mstore( ib, l_p, (unsigned char *)"bV         ", f);
-	strcat(b_tmp, "V");
+	strncat (b_tmp, "V", sizeof(b_tmp) - strlen(b_tmp) - 1);
 	Orig = 0;
       }
       if (barnum) {
 	char line[13];
-	strcpy (line, "b");
+	snprintf (line, sizeof(line), "%s", "b");
 	line[1] = barnum;
 	line[2] = '\0';
-	strcat (line, "         ");
+	strncat (line, "         ", sizeof(line) - strlen(line) - 1);
 	Mstore ( ib, l_p, (unsigned char *)line, f);
 	barnum = 0;
       }
       if ((i = strlen(b_tmp)) == 1 )  {
-	strcat (b_tmp, "-");
+	strncat (b_tmp, "-", sizeof(b_tmp) - strlen(b_tmp) - 1);
 	// printf("i = %d\n", i);
 	// Mstore( ib,l_p, (unsigned char *)"b-         ", f);
       }
       i = strlen (b_tmp);
       j = STAFF - i;
       while (j--)
-	strcat (b_tmp, " ");
+	strncat (b_tmp, " ", sizeof(b_tmp) - strlen(b_tmp) - 1);
       
       // printf("getsys.cc: about to Mstore %sXX\n", b_tmp);
       Mstore( ib,l_p, (unsigned char *) b_tmp, f);
@@ -1085,9 +1085,9 @@ int getsystem(file_in *fi, i_buf *ib, struct file_info *f,char buf[])
 	music[6] = ' ';
       }
       Mstore( ib ,l_p, (unsigned char *)"GM         ", f);
-      strcpy (b, "k");
-      strcat (b, &cur_key);
-      strcat (b, "         ");
+      snprintf (b, sizeof(b), "%s", "k");
+      strncat (b, &cur_key, 1);
+      strncat (b, "         ", sizeof(b) - strlen(b) - 1);
       Mstore( ib ,l_p, (unsigned char *)b, f);
       Key=0;
     }
@@ -1274,21 +1274,22 @@ do_music(i_buf *ib, unsigned char staff[], char buf[], int *l_p, int *skip,
     */
 
     if (music[b] == 'G' || music[b] == 'F') {
-      strcpy (buff, "GM");
+      snprintf (buff, sizeof(buff), "%s", "GM");
       if (music[b+1] == '8') {
-	strcat (buff, "8");
+	strncat (buff, "8", sizeof(buff) - strlen(buff) - 1);
 	if (music[b+2] == 'a')
-	  strcat (buff, "a");
+	  strncat (buff, "a", sizeof(buff) - strlen(buff) - 1);
 	if (music[b+2] == 'b')
-	  strcat (buff, "b");
+	  strncat (buff, "b", sizeof(buff) - strlen(buff) - 1);
       }
       else
 	music[b+1] = music[b+2] = ' ';
       for (i=2 ; i< STAFF; i++) buff[i] = ' '; // print g cleff on second line
+      buff[STAFF] = '\0';
       if (f->m_flags & TWOSTAFF) {
 	music[4] = music[b];
 	music[5] = music[6] = ' ';
-	strcat ( buff, "MG");
+	strncat (buff, "MG", sizeof(buff) - strlen(buff) - 1);
       }
     }
 
@@ -1392,18 +1393,36 @@ do_music(i_buf *ib, unsigned char staff[], char buf[], int *l_p, int *skip,
 char get_special_ornament(char * str) { //  <!tilde
   //   printf("getsys.cc: get_special_ornament: %s\n", str);
 
+  // Ornament staff[] byte codes. These were 238-243, which collide with the
+  // N-number encoding (N-number "Nnn" -> staff[i] += 220, so N10..N30 occupy
+  // 230..250). N18/N19/N20/N21/N23 (238/239/240/241/243) were being dispatched
+  // as ornaments instead of fret numbers. Remapped to verified-free byte values
+  // outside 230-250 that no staff[]/dat reader claims.
+  //
+  // Choosing a new ornament value: it must clear EVERY staff[] reader, not just
+  // the pua-glyph gap list. In particular value 209 is NOT free - Mstore
+  // (getsys.cc, staff[i]==209) rewrites it to '-','-' (mac double-dash), which
+  // silently injects spurious rules into ornament output. Also re-check the
+  // MANUSCRIPT-mode range reader score.cc (`c > 'p' && c != 'x' && c < 220`)
+  // and the pass-2 dispatch switch (dvi_f.cc). Verified-free set (need 5):
+  // 174,189,190,192,193,200,201,208,210.
+  //
+  // The two mordent cases in dvi_f.cc draw a FONT GLYPH (put_a_char) whose code
+  // stays 240/241 - the font-glyph index is decoupled from the staff byte, so
+  // those cases hardcode put_a_char(240)/put_a_char(241) rather than the staff
+  // value cc.
   if (!strcmp (str, "tilde"))
     return ('~');
   if (!strcmp (str, "2mordent"))
-    return ((char)240);
+    return ((char)208);
   if (!strcmp (str, "3mordent"))
-    return ((char)241);
+    return ((char)210);
   if (!strcmp (str, "stroke#"))
-    return ((char)243);
+    return ((char)193);
   if (!strcmp (str, "stroke"))
-    return ((char)239);
+    return ((char)201);
   if (!strcmp (str, "half-cross"))
-    return ((char)238);
+    return ((char)200);
   else
     return ('*');
 }

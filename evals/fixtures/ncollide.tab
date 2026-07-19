@@ -1,0 +1,28 @@
+%ncollide fixture - N-numbers in the byte range that used to collide with the
+%<!...> ornament codes. Before the remap, N18/N19/N20/N21/N23 were dispatched
+%as ornament marks (or nothing); N22 never collided. Post-remap all six render
+%as their two-digit fret numbers. The final baroque chord combines an ornament
+%(<!2mordent>) with a collision-range N-number (N20) to prove they no longer
+%share a byte and render together correctly.
+%
+%The pinned upstream reference binary shares the collision defect, so its PS
+%golden for these pages renders the ornaments instead of numbers; those pages
+%are carved out of the PS byte-compare via PS_KNOWN_DIVERGENT (see run.ts and
+%evals/REFERENCE.md "Known PS divergences"). The local-generated JSON golden
+%pins the corrected output and is the real guard for these pages.
+
+b
+1-a N18
+2-a N19
+3-a N20
+4-a N21
+5-a N22
+6-a N23
+b
+
+-b
+
+b
+1-a N20 c <!2mordent>
+b
+e

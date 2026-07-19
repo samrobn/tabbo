@@ -60,27 +60,11 @@ pass2(print *p, i_buf *i_b, font_list *f_a[], int *l_p, struct file_info *f, dou
       if (l->notes2)  free (l->notes2);
 
       if (l->text) {
-	/* Walk the full t_words chain (tab_p.cc builds it via ->next).
-	 * Previously only the first node was freed — per-request leak. */
-	struct t_words *tw = l->text->words;
-	while (tw) {
-	  struct t_words *tw_next = tw->next;
-	  if (tw->words) free(tw->words);
-	  free(tw);
-	  tw = tw_next;
-	}
-	free (l->text);
+	free_text(l->text);
       }
 
       if (l->text2){
-	struct t_words *tw2 = l->text2->words;
-	while (tw2) {
-	  struct t_words *tw2_next = tw2->next;
-	  if (tw2->words) free(tw2->words);
-	  free(tw2);
-	  tw2 = tw2_next;
-	}
-	free (l->text2);
+	free_text(l->text2);
       }
       if (l->special) free (l->special);
       l = l->prev;
@@ -91,26 +75,8 @@ pass2(print *p, i_buf *i_b, font_list *f_a[], int *l_p, struct file_info *f, dou
      * the while loop exits without processing the head's data fields. */
     if (l->notes)  free(l->notes);
     if (l->notes2) free(l->notes2);
-    if (l->text) {
-      struct t_words *tw = l->text->words;
-      while (tw) {
-        struct t_words *tw_next = tw->next;
-        if (tw->words) free(tw->words);
-        free(tw);
-        tw = tw_next;
-      }
-      free(l->text);
-    }
-    if (l->text2) {
-      struct t_words *tw2 = l->text2->words;
-      while (tw2) {
-        struct t_words *tw2_next = tw2->next;
-        if (tw2->words) free(tw2->words);
-        free(tw2);
-        tw2 = tw2_next;
-      }
-      free(l->text2);
-    }
+    if (l->text) free_text(l->text);
+    if (l->text2) free_text(l->text2);
     if (l->special) free(l->special);
     free (l);
     l=NULL;

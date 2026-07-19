@@ -31,6 +31,10 @@ export async function openTabFile(): Promise<FileInfo | null> {
 	if (!paths || paths.length === 0) return null;
 
 	const filePath = paths[0];
+	// A cancelled dialog can return [""] (a single empty string) rather than an
+	// empty array - treat a blank path as "no selection", not a file to open
+	// (Bun.file("").text() would otherwise throw ENOENT and surface as an error).
+	if (!filePath) return null;
 	// Unlike readTabFile (silent-null on failure — used for reload/revert where
 	// a missing file is an expected, quiet no-op), this is the user's explicit
 	// "open" action: a read failure (e.g. macOS TCC EPERM on iCloud-Drive paths)

@@ -11,10 +11,11 @@
       open http://localhost:8000/dev/preview.html
   Relative paths point at `../fonts/woff2/`, so it must be served from `engine/`.
 
-  Future work: a headless render + golden diff (gated on changes to
-  `engine/fonts/*.mf`, `engine/fonts/assemble-font.py`, or
-  `engine/fonts/pua-mapping.json`) would automate this check. Until that
-  exists, run this manually whenever those sources change.
+  Automated companion: `bun run evals:fonts` (evals/fonts-coverage.ts) renders
+  the same coverage grid via Skia and diffs it cell-by-cell against
+  evals/goldens/woff2-coverage.png; `bun run evals` runs it automatically when
+  the WOFF2s or pua-mapping.json change. This page stays the eyeball tool for
+  judging whether a flagged change is correct (outlines, winding, spot-checks).
 
   Not bundled into the production app (lives outside `electrobun.config.ts`'s
   `build.copy` map).

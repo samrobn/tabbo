@@ -28,6 +28,54 @@ const outputPdf = join(tempDir, "test.pdf");
 
 await Bun.write(inputFile, "b\n1-abc\ne\n");
 
+// Declare the .tab file association. Electrobun's Info.plist generator has no
+// document-types support (fixed template, src/cli/index.ts ~2051), so splice
+// CFBundleDocumentTypes + an imported UTI here - postBuild runs before
+// Electrobun's codesign step, which re-seals the edit. Runtime delivery is
+// warm-only: macOS routes document opens through application:openURLs: and
+// Electrobun bridges that to the open-url event, but an open that LAUNCHES
+// the app is dropped (the native event fires before the bun process registers
+// the handler; Electrobun v1.16.0 does not queue it). See src/bun/index.ts.
+const infoPlist = join(buildDir, `${appName}.app`, "Contents", "Info.plist");
+if (existsSync(infoPlist)) {
+	const plistBuddy = "/usr/libexec/PlistBuddy";
+	const has = (key: string) => {
+		try {
+			execSync(`${plistBuddy} -c 'Print :${key}' "${infoPlist}"`, { stdio: "pipe" });
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	if (!has("CFBundleDocumentTypes")) {
+		const commands = [
+			"Add :CFBundleDocumentTypes array",
+			"Add :CFBundleDocumentTypes:0 dict",
+			"Add :CFBundleDocumentTypes:0:CFBundleTypeName string 'Lute tablature'",
+			"Add :CFBundleDocumentTypes:0:CFBundleTypeRole string Editor",
+			"Add :CFBundleDocumentTypes:0:LSHandlerRank string Owner",
+			"Add :CFBundleDocumentTypes:0:LSItemContentTypes array",
+			"Add :CFBundleDocumentTypes:0:LSItemContentTypes:0 string dev.tabbo.tab",
+			"Add :UTImportedTypeDeclarations array",
+			"Add :UTImportedTypeDeclarations:0 dict",
+			"Add :UTImportedTypeDeclarations:0:UTTypeIdentifier string dev.tabbo.tab",
+			"Add :UTImportedTypeDeclarations:0:UTTypeDescription string 'Lute tablature'",
+			"Add :UTImportedTypeDeclarations:0:UTTypeConformsTo array",
+			"Add :UTImportedTypeDeclarations:0:UTTypeConformsTo:0 string public.plain-text",
+			"Add :UTImportedTypeDeclarations:0:UTTypeTagSpecification dict",
+			"Add :UTImportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension array",
+			"Add :UTImportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension:0 string tab",
+		];
+		for (const command of commands) {
+			execSync(`${plistBuddy} -c "${command}" "${infoPlist}"`);
+		}
+		execSync(`plutil -lint "${infoPlist}"`, { stdio: "pipe" });
+		console.log("postBuild: declared .tab document type in Info.plist");
+	} else {
+		console.log("postBuild: .tab document type already declared");
+	}
+}
+
 try {
 	// Code signing for extra binaries — BEFORE the smoke tests, so they
 	// exercise the hardened-runtime-signed binaries that actually ship
