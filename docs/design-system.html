@@ -19,8 +19,8 @@
 .state h3{font-size:11px;font-weight:var(--weight-strong);letter-spacing:.1em;text-transform:uppercase;color:var(--color-ink-faint);margin-bottom:12px}
 .state .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .state .cap{font-size:10px;color:var(--color-ink-faint);margin-top:2px}
-/* Buttons - mirror App.vue: px-3 py-1.5 text-sm rounded */
-.cbtn{font-family:var(--font-ui);font-size:13px;padding:6px 12px;border-radius:4px;border:none;cursor:default}
+/* Buttons - mirror the .btn classes in app.css: px-3 py-1.5 text-sm, control radius */
+.cbtn{font-family:var(--font-ui);font-size:13px;padding:6px 12px;border-radius:var(--radius-control);border:none;cursor:default}
 .cbtn.primary{background:var(--color-accent);color:var(--color-on-accent);font-weight:var(--weight-strong)}
 .cbtn.primary.hov{background:var(--color-accent-soft)}
 .cbtn.secondary{background:transparent;border:1px solid var(--color-hairline);color:var(--color-ink-soft);font-weight:var(--weight-mark)}
@@ -29,25 +29,25 @@
 .cbtn.danger.hov{background:color-mix(in srgb,var(--color-error-soft) 90%,transparent)}
 .cbtn.danger-quiet{background:transparent;color:var(--color-error-soft);font-weight:var(--weight-mark)}
 .cbtn.danger-quiet.hov{background:color-mix(in srgb,var(--color-error-soft) 10%,transparent)}
-/* Error banner + toasts - App.vue top-strip overlays */
-.banner{border-radius:8px;padding:8px 16px;font-size:13px;overflow-wrap:anywhere}
+/* Error banner + toasts - the .banner class in app.css, floating over the bottom of the split */
+.banner{border-radius:var(--radius-surface);box-shadow:var(--shadow-chip);padding:8px 16px;font-size:13px;overflow-wrap:anywhere}
 .banner.error{background:var(--color-error-surface);border:1px solid color-mix(in srgb,var(--color-error-soft) 45%,transparent);color:var(--color-error-ink)}
 .banner.error .ln{font-family:var(--font-ui);color:var(--color-error-soft)}
 .banner.toast-ok{background:var(--color-raise);border:1px solid var(--color-hairline);color:var(--color-ink)}
 /* Find chip - TabCodeEditor .tab-search */
-.chip-demo{display:inline-flex;align-items:center;gap:4px;padding:4px 6px;background:var(--color-raise);border:1px solid var(--color-hairline);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
-.chip-demo input{width:11rem;font-size:12px;font-family:var(--font-ui);padding:3px 3.4rem 3px 6px;background:var(--color-head);color:var(--color-ink);border:1px solid var(--color-hairline);border-radius:4px;outline:none}
+.chip-demo{display:inline-flex;align-items:center;gap:4px;padding:4px 6px;background:var(--color-raise);border:1px solid var(--color-hairline);border-radius:var(--radius-chip);box-shadow:var(--shadow-chip)}
+.chip-demo input{width:11rem;font-size:12px;font-family:var(--font-ui);padding:3px 3.4rem 3px 6px;background:var(--color-head);color:var(--color-ink);border:1px solid var(--color-hairline);border-radius:var(--radius-control);outline:none}
 .chip-demo .cnt{margin-left:-3.2rem;font-size:10px;color:var(--color-ink-faint);pointer-events:none}
-.chip-demo button{background:none;border:none;color:var(--color-ink-soft);font-size:12px;padding:2px 5px;border-radius:4px;cursor:default}
+.chip-demo button{background:none;border:none;color:var(--color-ink-soft);font-size:12px;padding:2px 5px;border-radius:var(--radius-control);cursor:default}
 .chip-demo button.hov{background:var(--color-hairline);color:var(--color-ink)}
 /* Modal shell - App.vue confirm/quit modals */
-.modal-demo{position:relative;background:color-mix(in srgb,black 40%,var(--color-app));border-radius:8px;padding:26px;display:flex;justify-content:center}
-.modal-demo .shell{background:var(--color-raise);border:1px solid var(--color-hairline);border-radius:8px;box-shadow:0 25px 50px -12px rgba(0,0,0,.6);padding:24px;max-width:24rem;width:100%}
+.modal-demo{position:relative;background:linear-gradient(var(--color-scrim),var(--color-scrim)),var(--color-app);border-radius:var(--radius-surface);padding:26px;display:flex;justify-content:center}
+.modal-demo .shell{background:var(--color-raise);border:1px solid var(--color-hairline);border-radius:var(--radius-surface);box-shadow:var(--shadow-dialog);padding:24px;max-width:24rem;width:100%}
 .modal-demo p{font-size:13px;color:var(--color-ink);margin-bottom:20px}
 .modal-demo .btns{display:flex;justify-content:flex-end;gap:12px}
 /* Zoom cluster - TabPreview overlay */
-.zoom-demo{display:inline-flex;align-items:center;gap:2px;padding:2px 4px;background:var(--color-raise);border:1px solid var(--color-hairline);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);font-size:12px}
-.zoom-demo .zbtn{background:none;border:none;padding:4px;border-radius:4px;color:var(--color-ink-soft);cursor:default;line-height:0}
+.zoom-demo{display:inline-flex;align-items:center;gap:2px;padding:2px 4px;background:var(--color-raise);border:1px solid var(--color-hairline);border-radius:var(--radius-chip);box-shadow:var(--shadow-chip);font-size:12px}
+.zoom-demo .zbtn{background:none;border:none;padding:4px;border-radius:var(--radius-control);color:var(--color-ink-soft);cursor:default;line-height:0}
 .zoom-demo .zbtn.hov{background:var(--color-hairline);color:var(--color-ink)}
 .zoom-demo .zbtn.disabled{color:var(--color-ink-faint)}
 .zoom-demo .zbtn.sync-hov{background:var(--color-accent-dim);color:var(--color-accent)}
@@ -138,6 +138,9 @@ h2{font-size:12px;font-weight:var(--weight-strong);letter-spacing:.12em;text-tra
   <div class="sw" data-var="--color-selection"><div class="meta"><div class="nm">Selection</div><div class="hx"></div></div></div>
   <div class="sw" data-var="--color-accent-dim"><div class="meta"><div class="nm">Accent Dim</div><div class="hx"></div><div class="use">active fills</div></div></div>
   <div class="sw" data-var="--color-error-dim"><div class="meta"><div class="nm">Error Dim</div><div class="hx"></div><div class="use">error line bg</div></div></div>
+  <div class="sw" data-var="--color-gold-dim"><div class="meta"><div class="nm">Gold Dim</div><div class="hx"></div><div class="use">title-overflow line bg</div></div></div>
+  <div class="sw" data-var="--color-scrim"><div class="meta"><div class="nm">Scrim</div><div class="hx"></div><div class="use">behind dialogs</div></div></div>
+  <div class="sw" data-var="--color-scrim-soft"><div class="meta"><div class="nm">Scrim Soft</div><div class="hx"></div><div class="use">behind side panels</div></div></div>
 </div>
 
 <h2>Type</h2>
@@ -180,6 +183,26 @@ Ach hett ich.tab   ·   10 of 5355   ·   100%</div>
   <div class="sample s-numeral">17   18   19        4      5      6</div>
 </div>
 
+<h2>Shape, elevation &amp; motion</h2>
+
+<div class="style">
+  <div class="name">Radius</div>
+  <div class="spec">Control <span data-spec="--radius-control"></span> · Chip <span data-spec="--radius-chip"></span> · Surface <span data-spec="--radius-surface"></span></div>
+  <div class="uses">Used by: <b>controls</b> — buttons, inputs, kbd and code chips; <b>chips</b> — find bar, zoom cluster; <b>surfaces</b> — dialogs, popovers, banners. Each step sits inside the next.</div>
+</div>
+
+<div class="style">
+  <div class="name">Shadow</div>
+  <div class="spec">Chip <span data-spec="--shadow-chip"></span> · Popover <span data-spec="--shadow-popover"></span> · Dialog <span data-spec="--shadow-dialog"></span></div>
+  <div class="uses">Used by: <b>chips and banners</b>; the <b>document-title popover</b>; <b>dialogs and side panels</b>. One shadow per layer above the panes.</div>
+</div>
+
+<div class="style">
+  <div class="name">Motion</div>
+  <div class="spec">Fast <span data-spec="--motion-fast"></span> · Base <span data-spec="--motion-base"></span> · Defer <span data-spec="--motion-defer"></span> · Ease <span data-spec="--motion-ease"></span></div>
+  <div class="uses">Used by: <b>fast</b> — hover and focus colour, chips, popovers, toasts; <b>base</b> — dialogs, side panels, pane and welcome entrances; <b>defer</b> — the wait before a loading state shows. Under reduced motion Fast and Base are 0ms, which switches every transition off.</div>
+</div>
+
 <h2>Chrome states</h2>
 <p class="note" style="margin-bottom:12px">Hand-written samples of the app chrome, using the same theme tokens and treatments as the Vue markup (App.vue, TabCodeEditor, TabPreview). Hover variants are shown as forced states so the page needs no interaction to verify. Documents the treatments; it is not a component library.</p>
 <div class="gallery">
@@ -191,7 +214,7 @@ Ach hett ich.tab   ·   10 of 5355   ·   100%</div>
   </div>
   <div class="state"><h3>Error banner</h3>
     <div class="banner error"><span class="ln">Line 4: </span>unknown flag character</div>
-    <div class="cap">compile errors - top strip of the preview pane</div>
+    <div class="cap">compile errors - floats over the bottom of the editor and preview split</div>
   </div>
   <div class="state"><h3>Export toast</h3>
     <div class="banner toast-ok" style="margin-bottom:8px">Saved to ~/Documents/Tabbo/untitled.pdf</div>
@@ -207,7 +230,7 @@ Ach hett ich.tab   ·   10 of 5355   ·   100%</div>
       <p>You have unsaved changes. Save before closing?</p>
       <div class="btns"><button class="cbtn secondary">Cancel</button><button class="cbtn danger-quiet">Discard</button><button class="cbtn primary">Save</button></div>
     </div></div>
-    <div class="cap">raise surface on a 40% scrim, hairline border, 8px radius - the quit modal's three-way layout</div>
+    <div class="cap">raise surface on the scrim, hairline border, surface radius, dialog shadow - the quit modal's three-way layout</div>
   </div>
   <div class="state"><h3>Zoom cluster</h3>
     <div class="row"><span class="zoom-demo">

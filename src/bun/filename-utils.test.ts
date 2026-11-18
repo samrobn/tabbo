@@ -29,48 +29,48 @@ describe("deriveTabFilename", () => {
   });
 });
 
-const PROJECT = "/Users/test/Documents/Tabbo";
+const PROJECT = "/u/test/Documents/Tabbo";
 
 describe("resolveSaveTarget", () => {
   test("new document → project dir, isNew", () => {
     expect(resolveSaveTarget("galliard.tab", null, PROJECT)).toEqual({
-      path: "/Users/test/Documents/Tabbo/galliard.tab",
+      path: "/u/test/Documents/Tabbo/galliard.tab",
       isNew: true,
     });
   });
   test("unchanged name → round-trip to currentPath, not new", () => {
-    expect(resolveSaveTarget("galliard.tab", "/Users/test/scores/galliard.tab", PROJECT)).toEqual({
-      path: "/Users/test/scores/galliard.tab",
+    expect(resolveSaveTarget("galliard.tab", "/u/test/scores/galliard.tab", PROJECT)).toEqual({
+      path: "/u/test/scores/galliard.tab",
       isNew: false,
     });
   });
   test("renamed → same directory as current, isNew", () => {
-    expect(resolveSaveTarget("pavane.tab", "/Users/test/scores/galliard.tab", PROJECT)).toEqual({
-      path: "/Users/test/scores/pavane.tab",
+    expect(resolveSaveTarget("pavane.tab", "/u/test/scores/galliard.tab", PROJECT)).toEqual({
+      path: "/u/test/scores/pavane.tab",
       isNew: true,
     });
   });
   test("comparison is exact-string (case-only change → Save As)", () => {
-    expect(resolveSaveTarget("Galliard.tab", "/Users/test/scores/galliard.tab", PROJECT)).toEqual({
-      path: "/Users/test/scores/Galliard.tab",
+    expect(resolveSaveTarget("Galliard.tab", "/u/test/scores/galliard.tab", PROJECT)).toEqual({
+      path: "/u/test/scores/Galliard.tab",
       isNew: true,
     });
   });
   test("targetDir override → joins name onto targetDir, isNew when path differs", () => {
-    expect(resolveSaveTarget("galliard.tab", "/Users/test/scores/galliard.tab", PROJECT, "/Users/test/Desktop")).toEqual({
-      path: "/Users/test/Desktop/galliard.tab",
+    expect(resolveSaveTarget("galliard.tab", "/u/test/scores/galliard.tab", PROJECT, "/u/test/Desktop")).toEqual({
+      path: "/u/test/Desktop/galliard.tab",
       isNew: true,
     });
   });
   test("targetDir equal to current dir → round-trip, not new", () => {
-    expect(resolveSaveTarget("galliard.tab", "/Users/test/scores/galliard.tab", PROJECT, "/Users/test/scores")).toEqual({
-      path: "/Users/test/scores/galliard.tab",
+    expect(resolveSaveTarget("galliard.tab", "/u/test/scores/galliard.tab", PROJECT, "/u/test/scores")).toEqual({
+      path: "/u/test/scores/galliard.tab",
       isNew: false,
     });
   });
   test("null targetDir → unchanged default behaviour", () => {
     expect(resolveSaveTarget("galliard.tab", null, PROJECT, null)).toEqual({
-      path: "/Users/test/Documents/Tabbo/galliard.tab",
+      path: "/u/test/Documents/Tabbo/galliard.tab",
       isNew: true,
     });
   });

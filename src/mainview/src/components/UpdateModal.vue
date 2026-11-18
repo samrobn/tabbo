@@ -45,117 +45,121 @@ watch(
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="status && status.phase !== 'idle' && status.phase !== 'checking'"
-      ref="modalRoot"
-      tabindex="-1"
-      class="fixed inset-0 z-50 flex items-center justify-center outline-none"
-      @keydown.esc="
-        status.phase === 'available' ? emit('snooze')
-        : status.phase === 'error' ? emit('dismissError')
-        : undefined
-      "
-    >
-      <!-- Backdrop — only dismissible on available / error states -->
+    <Transition name="overlay">
       <div
-        class="absolute inset-0 bg-black/40"
-        @click="
-          status.phase === 'available' ? emit('snooze')
-          : status.phase === 'error' ? emit('dismissError')
+        v-if="status && status.phase !== 'idle' && status.phase !== 'checking'"
+        ref="modalRoot"
+        tabindex="-1"
+        class="fixed inset-0 z-50 flex items-center justify-center outline-none"
+        @keydown.esc="
+          status?.phase === 'available' ? emit('snooze')
+          : status?.phase === 'error' ? emit('dismissError')
           : undefined
         "
-      />
-
-      <div
-        class="relative bg-raise border border-hairline text-ink rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-        @click.stop
       >
-        <!-- available -->
-        <template v-if="status.phase === 'available'">
-          <h2 class="text-base font-semibold text-ink mb-1">
-            Update available
-            <span v-if="trackedVersion" class="font-normal text-ink-soft">— v{{ trackedVersion }}</span>
-          </h2>
-          <p class="text-sm text-ink-soft mb-4">A new version of Tabbo is ready to download.</p>
+        <!-- Backdrop — only dismissible on available / error states -->
+        <div
+          class="absolute inset-0 bg-scrim"
+          @click="
+            status.phase === 'available' ? emit('snooze')
+            : status.phase === 'error' ? emit('dismissError')
+            : undefined
+          "
+        />
 
-          <template v-if="changelog">
-            <p class="text-xs font-medium text-ink-soft uppercase tracking-wide mb-1">What's new</p>
-            <pre class="whitespace-pre-wrap text-sm font-mono bg-head text-ink border border-hairline rounded p-3 mb-5 max-h-48 overflow-y-auto">{{ changelog }}</pre>
+        <div class="dialog p-6 max-w-md" @click.stop>
+          <!-- available -->
+          <template v-if="status.phase === 'available'">
+            <h2 class="surface-title mb-1">
+              Update available
+              <span v-if="trackedVersion" class="font-light text-ink-soft">— v{{ trackedVersion }}</span>
+            </h2>
+            <p class="text-sm text-ink-soft mb-4">A new version of Tabbo is ready to download.</p>
+
+            <template v-if="changelog">
+              <p class="eyebrow mb-1">What's new</p>
+              <pre class="whitespace-pre-wrap text-sm font-mono bg-head text-ink border border-hairline rounded-control p-3 mb-5 max-h-48 overflow-y-auto">{{ changelog }}</pre>
+            </template>
+
+            <div class="flex justify-end gap-3">
+              <button
+                @click="emit('snooze')"
+                class="btn btn-secondary"
+              >
+                Remind me later
+              </button>
+              <button
+                @click="emit('download')"
+                class="btn btn-primary"
+              >
+                Install now
+              </button>
+            </div>
           </template>
 
-          <div class="flex justify-end gap-3">
-            <button
-              @click="emit('snooze')"
-              class="px-3 py-1.5 text-sm font-medium border border-hairline text-ink-soft hover:bg-hairline rounded transition-colors"
-            >
-              Remind me later
-            </button>
-            <button
-              @click="emit('download')"
-              class="px-3 py-1.5 text-sm font-semibold text-on-accent bg-accent hover:bg-accent-soft rounded transition-colors"
-            >
-              Install now
-            </button>
-          </div>
-        </template>
+          <!-- downloading -->
+          <template v-else-if="status.phase === 'downloading'">
+            <h2 class="surface-title mb-1">Downloading update…</h2>
+            <p class="text-sm text-ink-soft mb-4">
+              <template v-if="trackedVersion">Downloading v{{ trackedVersion }}.</template>
+              <template v-else>Download in progress.</template>
+              Please keep Tabbo open.
+            </p>
+            <!-- Electrobun 2.x reports no progress; a full-width bar would look
+                 finished (and stands still under Reduce Motion), so without a
+                 figure the text above stands alone. -->
+            <template v-if="status.progress != null">
+              <div
+                class="w-full bg-head rounded-full h-2 mb-5"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-valuenow="Math.round(status.progress)"
+              >
+                <div
+                  class="bg-accent h-2 rounded-full transition-[width]"
+                  :style="{ width: `${Math.round(status.progress)}%` }"
+                />
+              </div>
+              <p class="text-xs text-ink-soft text-right">{{ Math.round(status.progress) }}%</p>
+            </template>
+          </template>
 
-        <!-- downloading -->
-        <template v-else-if="status.phase === 'downloading'">
-          <h2 class="text-base font-semibold text-ink mb-1">Downloading update…</h2>
-          <p class="text-sm text-ink-soft mb-4">
-            <template v-if="trackedVersion">Downloading v{{ trackedVersion }}.</template>
-            <template v-else>Download in progress.</template>
-            Please keep Tabbo open.
-          </p>
-          <div class="w-full bg-head rounded-full h-2 mb-5">
-            <div
-              class="bg-accent h-2 rounded-full transition-all duration-300"
-              :style="{
-                width: status.progress != null ? `${Math.round(status.progress)}%` : '100%',
-              }"
-              :class="{ 'animate-pulse': status.progress == null }"
-            />
-          </div>
-          <p class="text-xs text-ink-soft text-right">
-            {{ status.progress != null ? `${Math.round(status.progress)}%` : 'Preparing…' }}
-          </p>
-        </template>
+          <!-- ready -->
+          <template v-else-if="status.phase === 'ready'">
+            <h2 class="surface-title mb-1">
+              Update ready
+              <span v-if="trackedVersion" class="font-light text-ink-soft">— v{{ trackedVersion }}</span>
+            </h2>
+            <p class="text-sm text-ink-soft mb-5">
+              The update has been downloaded. Tabbo will restart to apply it.
+            </p>
+            <div class="flex justify-end">
+              <button
+                @click="emit('apply')"
+                :disabled="isApplying"
+                class="btn btn-primary"
+              >
+                {{ isApplying ? 'Restarting Tabbo…' : 'Restart now' }}
+              </button>
+            </div>
+          </template>
 
-        <!-- ready -->
-        <template v-else-if="status.phase === 'ready'">
-          <h2 class="text-base font-semibold text-ink mb-1">
-            Update ready
-            <span v-if="trackedVersion" class="font-normal text-ink-soft">— v{{ trackedVersion }}</span>
-          </h2>
-          <p class="text-sm text-ink-soft mb-5">
-            The update has been downloaded. Tabbo will restart to apply it.
-          </p>
-          <div class="flex justify-end">
-            <button
-              @click="emit('apply')"
-              :disabled="isApplying"
-              class="px-3 py-1.5 text-sm font-semibold text-on-accent bg-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              :class="{ 'hover:bg-accent-soft': !isApplying }"
-            >
-              {{ isApplying ? 'Restarting Tabbo…' : 'Restart now' }}
-            </button>
-          </div>
-        </template>
-
-        <!-- error -->
-        <template v-else-if="status.phase === 'error'">
-          <h2 class="text-base font-semibold text-error-soft mb-1">Update failed</h2>
-          <p class="text-sm text-ink-soft mb-5">{{ status.message }}</p>
-          <div class="flex justify-end">
-            <button
-              @click="emit('dismissError')"
-              class="px-3 py-1.5 text-sm font-medium border border-hairline text-ink-soft hover:bg-hairline rounded transition-colors"
-            >
-              Dismiss
-            </button>
-          </div>
-        </template>
+          <!-- error -->
+          <template v-else-if="status.phase === 'error'">
+            <h2 class="surface-title text-error-soft mb-1">Update failed</h2>
+            <p class="text-sm text-ink-soft mb-5">{{ status.message }}</p>
+            <div class="flex justify-end">
+              <button
+                @click="emit('dismissError')"
+                class="btn btn-secondary"
+              >
+                Dismiss
+              </button>
+            </div>
+          </template>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>

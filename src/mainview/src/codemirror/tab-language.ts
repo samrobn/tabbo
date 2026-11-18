@@ -2,7 +2,10 @@
  * CodeMirror 6 syntax highlighting for .tab lute tablature format.
  * Uses StreamLanguage for line-based parsing.
  */
-import { StreamLanguage, LanguageSupport } from '@codemirror/language'
+import { StreamLanguage, LanguageSupport, forceParsing, syntaxTreeAvailable } from '@codemirror/language'
+import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view'
+import { BARLINE } from '../../../shared/bar-ruling'
+import { HIGHLIGHT_FILL } from '../../../shared/layout-render'
 import { Tag } from '@lezer/highlight'
 
 // Custom tags for tab-specific elements
@@ -13,6 +16,11 @@ const tabTags = {
   fretLetter: Tag.define(),
   courseNumber: Tag.define(),
   music: Tag.define(),
+  // Q/@ editorial highlight. Its colour depends on document-wide flags, so the
+  // editor picks it (editorialColour), not the tokenizer. Barlines are separate:
+  // the engine never draws them as parens.
+  editorial: Tag.define(),
+  editorialBarline: Tag.define(),
 }
 
 interface TabState {
@@ -30,6 +38,11 @@ const tabLanguage = StreamLanguage.define<TabState>({
       textBlockChar: null,
       inGrid: false,
     }
+  },
+
+  tokenTable: {
+    editorial: tabTags.editorial,
+    editorialBarline: tabTags.editorialBarline,
   },
 
   token(stream, state): string | null {
@@ -79,8 +92,15 @@ const tabLanguage = StreamLanguage.define<TabState>({
         return 'keyword'
       }
 
+      // Highlighted barline: as the engine (dvi_f.cc), a Q or L anywhere in
+      // the barline's token marks it, and a '!' cancels the mark
+      const barToken = BARLINE.test(stream.string) ? /^\S+/.exec(stream.string)?.[0] : undefined
+      if (barToken && /[QL]/.test(barToken) && !barToken.includes('!') && stream.match(barToken)) {
+        return 'editorialBarline'
+      }
+
       // Barlines at start of line: b, bb, B, .bb., etc.
-      if (stream.match(/^\.?[bB]+\.?(?![a-z])/)) {
+      if (stream.match(BARLINE)) {
         return 'keyword'
       }
 
@@ -119,6 +139,11 @@ const tabLanguage = StreamLanguage.define<TabState>({
       // Triplet start
       if (stream.match(/^t[0-6]/)) {
         return 'bracket'
+      }
+
+      // Highlighted rhythm flag: 1Q, 2@
+      if (stream.match(/^[Ww0-6x][Q@]/)) {
+        return 'editorial'
       }
 
       // Rhythm flags at start: W, w, 0-6, x
@@ -213,8 +238,56 @@ const tabLanguage = StreamLanguage.define<TabState>({
   },
 })
 
+// CodeMirror parses in the background only ~100k characters past the viewport,
+// and without requestIdleCallback (WKWebView has none) each resumed parse waits
+// up to 500ms - so scrolling far into a long score showed unstyled lines for
+// half a second. Once typing pauses, parse to the end of the document in short
+// slices so the whole score is already highlighted when it is scrolled to.
+const PARSE_AHEAD_DELAY_MS = 300
+const PARSE_SLICE_MS = 20
+
+export const parseToEnd = ViewPlugin.fromClass(class {
+  private timer: ReturnType<typeof setTimeout> | undefined
+
+  constructor(private readonly view: EditorView) {
+    this.schedule(PARSE_AHEAD_DELAY_MS)
+  }
+
+  update(update: ViewUpdate): void {
+    if (update.docChanged) this.schedule(PARSE_AHEAD_DELAY_MS)
+  }
+
+  destroy(): void {
+    clearTimeout(this.timer)
+  }
+
+  private schedule(delay: number): void {
+    clearTimeout(this.timer)
+    this.timer = setTimeout(() => this.step(), delay)
+  }
+
+  private step(): void {
+    const end = this.view.state.doc.length
+    if (syntaxTreeAvailable(this.view.state, end)) return
+    forceParsing(this.view, end, PARSE_SLICE_MS)
+    this.schedule(0)
+  }
+})
+
+// The colours the engine gives Q/@ marks, from the document's flags, which
+// apply wherever in the file they appear: red under -highlightred, grey
+// otherwise. -highlightparen draws flags and notes as uncoloured parens (it
+// wins over red), but barlines ignore it.
+export function editorialColours(doc: string): { mark: string | null; barline: string } {
+  // Only flag lines (starting with '-') set flags; a % comment or a title that
+  // mentions one doesn't.
+  const flagLines = doc.split('\n').filter((line) => line.startsWith('-')).join('\n')
+  const barline = /(^|\s)-highlightred\b/m.test(flagLines) ? HIGHLIGHT_FILL.red : HIGHLIGHT_FILL.gray
+  return { mark: /(^|\s)-highlightparen\b/m.test(flagLines) ? null : barline, barline }
+}
+
 export function tab(): LanguageSupport {
-  return new LanguageSupport(tabLanguage)
+  return new LanguageSupport(tabLanguage, [parseToEnd])
 }
 
 export { tabLanguage, tabTags }

@@ -3,9 +3,9 @@ export interface BarRuling {
   altByLine: boolean[];
 }
 
-// The tokenizer's barline rule, verbatim (src/mainview/src/codemirror/tab-language.ts:83).
-// The ruler and the syntax highlighter must never disagree about what a barline is.
-const BARLINE = /^\.?[bB]+\.?(?![a-z])/;
+// What counts as a barline line. The syntax highlighter imports this too, so
+// the ruler and the highlighter can never disagree about what a barline is.
+export const BARLINE = /^\.?[bB]+\.?(?![a-z])/;
 
 export function computeBarRuling(lineTexts: string[]): BarRuling {
   const barNumberByLine: (number | null)[] = [];

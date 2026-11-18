@@ -1,5 +1,5 @@
-import { ApplicationMenu, Utils } from "electrobun/bun";
-import type { ApplicationMenuItemConfig } from "electrobun/bun";
+import { ApplicationMenu, Utils } from "electrobun/main";
+import type { ApplicationMenuItemConfig } from "electrobun/main";
 
 // Wayne Cripps's Dartmouth lute pages were retired (the whole ~wbc/ path 403s);
 // point at the archive.org snapshot, which preserves the original AboutTab.html.
@@ -65,11 +65,19 @@ const menuTemplate: ApplicationMenuItemConfig[] = [
 
 export type MenuCallback = (action: string) => void;
 
+// Electrobun types the event as unknown; the runtime shape is { data: { action } }.
+function menuActionOf(event: unknown): string | null {
+	if (typeof event !== "object" || event === null || !("data" in event)) return null;
+	const { data } = event;
+	if (typeof data !== "object" || data === null || !("action" in data)) return null;
+	return typeof data.action === "string" ? data.action : null;
+}
+
 export function setupMenu(onAction: MenuCallback): void {
 	ApplicationMenu.setApplicationMenu(menuTemplate);
 
-	ApplicationMenu.on("application-menu-clicked", (event: { data: { action: string } }) => {
-		const action = event.data?.action;
+	ApplicationMenu.on("application-menu-clicked", (event: unknown) => {
+		const action = menuActionOf(event);
 		if (!action) return;
 
 		if (action === "help:docs") {

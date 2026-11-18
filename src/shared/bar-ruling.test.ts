@@ -11,7 +11,6 @@ describe("computeBarRuling", () => {
   });
 
   test("matches every tokenizer barline form, trailing content allowed", () => {
-    // mirrors tab-language.ts:83: /^\.?[bB]+\.?(?![a-z])/
     const r = computeBarRuling(["b", "bb", ".bb.", "B", "bQ", "bbX", "b1", "b  "]);
     expect(r.barNumberByLine).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });

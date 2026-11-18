@@ -21,3 +21,7 @@ export const AUTO_SAVE_INTERVAL_MS = 30_000;
 export const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export const EXPORT_STATUS_DISPLAY_MS = 4_000;
+
+// Asking bun for the document that launched the app (takePendingExternalOpen).
+export const LAUNCH_OPEN_ATTEMPTS = 3;
+export const LAUNCH_OPEN_RETRY_MS = 1_000;

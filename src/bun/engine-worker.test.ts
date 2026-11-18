@@ -133,6 +133,11 @@ describe("EngineWorker", () => {
 			);
 			expect(expectedCounts.has(totalSystems)).toBe(true);
 		}
+
+		// Latest wins: the newest content is never the one superseded.
+		const newest = results[contentCount - 1];
+		expect(newest.superseded).toBeUndefined();
+		expect(newest.layout).not.toBeNull();
 	}, 30_000);
 
 	test("crash supervision: kill the worker mid-session, next request respawns and succeeds", async () => {
@@ -154,6 +159,32 @@ describe("EngineWorker", () => {
 		expect(second.layout).not.toBeNull();
 		expect(second.errors).toEqual([]);
 	}, 15_000);
+
+	test("a worker that dies at start-up fails fast with its exit code and is not reused", async () => {
+		const dying = new EngineWorker(() => "/usr/bin/false");
+		try {
+			const started = Date.now();
+			const result = await dying.getLayout(SIMPLE_TAB);
+			expect(result.layout).toBeNull();
+			expect(result.errors[0].message).toMatch(/exited \(code 1\) during version probe/);
+			expect(Date.now() - started).toBeLessThan(1_000);
+			expect((dying as unknown as { proc: unknown }).proc).toBeNull();
+		} finally {
+			dying.shutdown();
+		}
+	}, 10_000);
+
+	test("a failed version probe kills the worker instead of leaving it for the next request", async () => {
+		// echo prints its argument as a non-JSON line, failing the probe.
+		const garbled = new EngineWorker(() => "/bin/echo");
+		try {
+			const result = await garbled.getLayout(SIMPLE_TAB);
+			expect(result.errors[0].message).toMatch(/version probe/);
+			expect((garbled as unknown as { proc: unknown }).proc).toBeNull();
+		} finally {
+			garbled.shutdown();
+		}
+	}, 10_000);
 
 	test("spawn-cap exhaustion resolves with error envelope (not throws)", async () => {
 		// Exhaust the respawn cap (3 spawns in 30s) by killing the proc repeatedly.
@@ -288,6 +319,28 @@ describe("EngineWorker", () => {
 		const count = walkPrimitives(result.layout!);
 		expect(count).toBeGreaterThan(0);
 	}, 30_000);
+
+	test("a bQ barline greys only the barline, not what is drawn after it", async () => {
+		const source = "{t}\nb\n1-abc dDo\n2-efg hG\nbQ\n3-abc dDo\n4-efg hG\nb\n1-abc dDo\ne\n";
+		const result = await worker.getLayout(source);
+		expect(result.layout).not.toBeNull();
+		const highlighted = result.layout!.pages
+			.flatMap((page) => page.systems.flatMap((system) => system.primitives))
+			.filter((primitive) => "highlight" in primitive && primitive.highlight);
+		expect(highlighted.map((primitive) => primitive.type)).toEqual(["rule"]);
+	}, 10_000);
+
+	test("a Paren highlight draws parens either side of the marked glyph, as the export does", async () => {
+		const result = await worker.getLayout("-highlightparen\n{t}\n\n2a\n2Qa\nb\n");
+		expect(result.layout).not.toBeNull();
+		const glyphCodes = result.layout!.pages
+			.flatMap((page) => page.systems.flatMap((system) => system.primitives))
+			.flatMap((primitive) => (primitive.type === "glyph" ? [primitive.char_code] : []));
+		const open = glyphCodes.indexOf(40);
+		expect(open).toBeGreaterThan(-1);
+		expect(glyphCodes[open + 2]).toBe(41);
+		expect(glyphCodes[open + 1]).toBe(glyphCodes[0]); // the same flag as the unmarked chord
+	}, 10_000);
 
 	test("exhaustive primitive union: sample.tab walks cleanly", async () => {
 		const sampleContent = await Bun.file(

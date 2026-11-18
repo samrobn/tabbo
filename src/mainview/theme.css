@@ -1,5 +1,6 @@
 /*
- * Tabbo design tokens — single source of truth for colour and core type.
+ * Tabbo design tokens — single source of truth for colour, core type, shape,
+ * elevation and motion.
  *
  * Structure: paints (what a colour IS) -> roles (what a colour is FOR).
  * Roles point at paints, so re-aiming a role (e.g. accent back to gold)
@@ -55,6 +56,9 @@
   --color-selection: rgba(224, 144, 106, 0.25);
   --color-accent-dim: rgba(224, 144, 106, 0.13);
   --color-error-dim: rgba(214, 105, 92, 0.12);
+  --color-gold-dim: rgba(201, 165, 104, 0.13);
+  --color-scrim: rgba(0, 0, 0, 0.4);       /* behind dialogs: blocks the app */
+  --color-scrim-soft: rgba(0, 0, 0, 0.2);  /* behind side panels: the document stays readable */
 
   /* type */
   --font-ui: "Martian Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -65,4 +69,30 @@
   --tracking-body: 0.02em;
   --numeral-size: 9.5px;
   --numeral-tracking: 0.1em;
+
+  /* shape — three steps, each sitting inside the next */
+  --radius-control: 4px;  /* buttons, inputs, kbd and code chips */
+  --radius-chip: 6px;     /* floating chips: find bar, zoom cluster */
+  --radius-surface: 8px;  /* dialogs, popovers, banners */
+
+  /* elevation — one shadow per layer above the panes */
+  --shadow-chip: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-popover: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+  --shadow-dialog: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+
+  /* motion - transitions and entrances in the chrome read these, so the
+     reduced-motion override below switches them off in one place. The one
+     exception is App.vue's edited marker, whose requested timing has its own
+     reduced-motion rule beside it. */
+  --motion-fast: 120ms;   /* hover and focus colour, chips, popovers, toasts */
+  --motion-base: 180ms;   /* dialogs, side panels, pane and welcome entrances */
+  --motion-defer: 150ms;  /* wait before showing a loading state, so quick work never flashes one */
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
 }

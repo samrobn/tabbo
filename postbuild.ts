@@ -8,13 +8,26 @@ import { execSync } from "child_process";
 
 const buildDir = process.env.ELECTROBUN_BUILD_DIR;
 const appName = process.env.ELECTROBUN_APP_NAME;
+const buildEnv = process.env.ELECTROBUN_BUILD_ENV;
 
-if (!buildDir || !appName) {
-	console.log("postBuild: skipping smoke test (no build env vars)");
+if (!buildDir) {
+	console.log("postBuild: skipping smoke test (not run by an Electrobun build)");
 	process.exit(0);
 }
+// Inside a build, a missing variable must fail it: skipping here would also
+// skip signing tab/gs and the .tab file association.
+if (!appName || !buildEnv) {
+	throw new Error("postBuild: ELECTROBUN_APP_NAME or ELECTROBUN_BUILD_ENV is missing");
+}
 
-const resourcesApp = join(buildDir, `${appName}.app`, "Contents", "Resources", "app");
+// Electrobun 2.x passes the plain app.name, while the bundle is channel-suffixed
+// for every channel but stable (Tabbo-dev.app, Tabbo-canary.app, Tabbo.app).
+const appBundle = join(buildDir, buildEnv === "stable" ? `${appName}.app` : `${appName}-${buildEnv}.app`);
+if (!existsSync(appBundle)) {
+	throw new Error(`postBuild: app bundle not found at ${appBundle}`);
+}
+
+const resourcesApp = join(appBundle, "Contents", "Resources", "app");
 const tabBinary = join(resourcesApp, "resources", "bin", "tab");
 const gsBinary = join(resourcesApp, "resources", "bin", "gs");
 const fontsDir = join(resourcesApp, "resources", "fonts");
@@ -28,15 +41,14 @@ const outputPdf = join(tempDir, "test.pdf");
 
 await Bun.write(inputFile, "b\n1-abc\ne\n");
 
-// Declare the .tab file association. Electrobun's Info.plist generator has no
-// document-types support (fixed template, src/cli/index.ts ~2051), so splice
-// CFBundleDocumentTypes + an imported UTI here - postBuild runs before
-// Electrobun's codesign step, which re-seals the edit. Runtime delivery is
-// warm-only: macOS routes document opens through application:openURLs: and
-// Electrobun bridges that to the open-url event, but an open that LAUNCHES
-// the app is dropped (the native event fires before the bun process registers
-// the handler; Electrobun v1.16.0 does not queue it). See src/bun/index.ts.
-const infoPlist = join(buildDir, `${appName}.app`, "Contents", "Info.plist");
+// Declare the .tab file association by splicing CFBundleDocumentTypes + an
+// imported UTI here - postBuild runs before Electrobun's codesign step, which
+// re-seals the edit. Not Electrobun's app.fileAssociations (1.18+): it derives
+// a UTI per channel from the bundle identifier, exports it (claiming .tab,
+// a format Tabbo doesn't own), and conforms it to public.data only, losing
+// public.plain-text and the Owner handler rank declared here. Runtime delivery:
+// see the open-url handler in src/bun/index.ts.
+const infoPlist = join(appBundle, "Contents", "Info.plist");
 if (existsSync(infoPlist)) {
 	const plistBuddy = "/usr/libexec/PlistBuddy";
 	const has = (key: string) => {
@@ -82,7 +94,8 @@ try {
 	// (notarisation proves a signature exists, not that the binary runs).
 	// Electrobun's codesign only auto-signs Mach-O in Contents/MacOS/ and
 	// .node files in Resources/app/bun/. Our binaries in resources/bin/
-	// need manual signing. postBuild runs before codesign (CLI line 2880 vs 3142).
+	// need manual signing. postBuild runs before codesign (the CLI's build
+	// command calls runHook("postBuild") before codesignAppBundle).
 	const developerId = process.env.ELECTROBUN_DEVELOPER_ID;
 	if (developerId) {
 		const binaries = [tabBinary, gsBinary].filter(existsSync);

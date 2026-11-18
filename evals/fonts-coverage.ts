@@ -24,7 +24,7 @@
 import { join, basename } from "node:path";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
+import { createCanvas, loadImage, GlobalFonts, type Canvas } from "@napi-rs/canvas";
 
 const FONTS_DIR = join(import.meta.dir, "../engine/fonts/woff2");
 const MAPPING_PATH = join(import.meta.dir, "../engine/fonts/pua-mapping.json");
@@ -115,7 +115,7 @@ function registerFonts(): void {
 	}
 }
 
-function render(): ReturnType<typeof createCanvas> {
+function render(): Canvas {
 	registerFonts();
 	const { cells, width, height } = layoutCells();
 	const canvas = createCanvas(width, height);

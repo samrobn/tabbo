@@ -18,7 +18,7 @@
 
 import { FIXTURES, filesBytesEqual } from "./utils";
 import { join } from "node:path";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { renderJsonFixture } from "./render-json";
 
 const GOLDENS_DIR = join(import.meta.dir, "goldens-json");

@@ -7,10 +7,11 @@ import HelpPanel from './components/HelpPanel.vue'
 import ShortcutsPanel from './components/ShortcutsPanel.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import WelcomeScreen from './components/WelcomeScreen.vue'
-import { COMPILE_MESSAGES, STORAGE_KEYS, AUTO_SAVE_INTERVAL_MS, UPDATE_CHECK_INTERVAL_MS, EXPORT_STATUS_DISPLAY_MS } from './constants'
+import { COMPILE_MESSAGES, STORAGE_KEYS, AUTO_SAVE_INTERVAL_MS, UPDATE_CHECK_INTERVAL_MS, EXPORT_STATUS_DISPLAY_MS, LAUNCH_OPEN_ATTEMPTS, LAUNCH_OPEN_RETRY_MS } from './constants'
 import { examples } from './examples'
-import type { TabboRPC, LayoutResult, Settings, CompilationError, UpdateStatus, SaveResult } from '../../shared/rpc-types'
-import { addRecentDir } from '../../shared/recent-dirs'
+import type { TabboRPC, LayoutResult, CompilationError, UpdateStatus, SaveResult, RecentsChange } from '../../shared/rpc-types'
+import { basename, dirname, tildify } from '../../shared/display-path'
+import { RPC_MAX_REQUEST_MS } from '../../shared/rpc-types'
 import { overflowingTitleLines } from '../../shared/title-overflow'
 import type { ScrollPosition } from '../../shared/scroll-sync'
 import { startCaptureWorker } from './composables/useCaptureWorker'
@@ -18,10 +19,8 @@ import { startCaptureWorker } from './composables/useCaptureWorker'
 // CSS px per pt at the canonical 96 DPI reference pixel density (1pt = 1/72 in, 1px = 1/96 in)
 const PT_TO_PX = 96 / 72
 
-const basename = (path: string) => path.split("/").pop() ?? path
 // Drop the last extension (any: .tab/.txt/…). The title menu edits the stem; ".tab" is a fixed suffix.
 const stripExt = (name: string) => name.replace(/\.[^/.]+$/, "")
-const dirname = (path: string) => { const slash = path.lastIndexOf("/"); return slash <= 0 ? path : path.slice(0, slash) }
 
 function capturePreviewPages(): Array<{ svg: string; widthPx: number; heightPx: number }> {
   if (!layoutResult.value) return []
@@ -57,7 +56,7 @@ function capturePreviewPages(): Array<{ svg: string; widthPx: number; heightPx: 
 }
 
 const rpc = Electroview.defineRPC<TabboRPC>({
-  maxRequestTime: 15_000,
+  maxRequestTime: RPC_MAX_REQUEST_MS,
   handlers: {
     messages: {
       menuAction: ({ action }) => {
@@ -73,8 +72,7 @@ const rpc = Electroview.defineRPC<TabboRPC>({
           case 'showHelp': showShortcutsPanel.value = false; showHelpPanel.value = true; break
           case 'showShortcuts': showHelpPanel.value = false; showShortcutsPanel.value = true; break
           case 'checkForUpdates': checkForUpdates(true); break
-          case 'quitRequested': handleWindowAction('quit'); break
-          case 'closeRequested': handleWindowAction('close'); break
+          case 'quitRequested': handleQuit(); break
         }
       },
       updateStatusChanged: ({ status }) => {
@@ -89,6 +87,15 @@ const rpc = Electroview.defineRPC<TabboRPC>({
 
 const electrobun = new Electrobun.Electroview({ rpc })
 
+const errorBanner = ref<HTMLElement | null>(null)
+// The banner floats over the bottom of <main>, which the editor pane fills to its
+// bottom edge; keep the editor's caret above the banner. Measured, so the
+// banner's offset lives only in its CSS.
+const errorBannerInset = (): number => {
+  const banner = errorBanner.value
+  const main = banner?.offsetParent
+  return banner && main ? main.clientHeight - banner.offsetTop : 0
+}
 const editorRef = ref<{ toggleSearch: () => void; setScrollPosition: (position: ScrollPosition) => void } | null>(null)
 const previewRef = ref<{ setScrollPosition: (position: ScrollPosition) => void } | null>(null)
 
@@ -213,6 +220,18 @@ const currentFilePath = ref<string | null>(null)
 const isDirty = ref<boolean>(false)
 const pendingTargetDir = ref<string | null>(null)
 const recentSaveDirs = ref<string[]>([])
+const recentFiles = ref<string[]>([])
+// Bun owns the stored recent lists; the webview sends the change and shows
+// what comes back. Best-effort: a settings failure never fails an open or save.
+async function updateRecents(change: RecentsChange): Promise<void> {
+  try {
+    const settings = await electrobun.rpc!.request.updateRecents(change)
+    recentFiles.value = settings.recentFiles
+    recentSaveDirs.value = settings.recentSaveDirs
+  } catch {
+    // Keep the lists as shown
+  }
+}
 
 // Document-title popover (in-Vue; window.confirm is broken in this WKWebView)
 const titleMenuOpen = ref<boolean>(false)
@@ -231,6 +250,8 @@ const exportStatus = ref<{ success: boolean; message: string } | null>(null)
 const confirmModalOpen = ref<boolean>(false)
 const confirmModalMessage = ref<string>('')
 const confirmPrimaryLabel = ref<string>('Discard changes')
+const confirmSecondaryLabel = ref<string>('Cancel')
+const confirmPrimaryIsSafe = ref<boolean>(false)
 let confirmResolver: ((value: boolean) => void) | null = null
 const confirmPrimaryBtn = ref<HTMLButtonElement | null>(null)
 
@@ -312,7 +333,7 @@ async function getLayout(): Promise<void> {
 }
 
 // Load content into the editor from a non-keystroke source (open, example,
-// reopen-last, draft restore, New). Sets the one-shot watcher guards BEFORE
+// draft restore, New). Sets the one-shot watcher guards BEFORE
 // assigning tabContent so the content watcher consumes them on its next run -
 // a guard set *after* the assignment is left dangling and swallows the next
 // real edit instead (the cause of the "first keystroke after open is not
@@ -375,7 +396,10 @@ function debouncedCompile(): void {
   }, compileDebounceMs)
 }
 
-function askConfirm(message: string, primaryLabel = "Discard changes"): Promise<boolean> {
+// `primaryIsSafe`: the primary choice keeps the user's work, so it isn't styled
+// as destructive, and dismissing the dialog (Esc, a click outside) takes it
+// rather than the secondary choice - a stray dismissal never discards work.
+function askConfirm(message: string, primaryLabel = "Discard changes", secondaryLabel = "Cancel", primaryIsSafe = false): Promise<boolean> {
   if (confirmResolver) {
     confirmResolver(false)
     confirmResolver = null
@@ -383,6 +407,8 @@ function askConfirm(message: string, primaryLabel = "Discard changes"): Promise<
   return new Promise(resolve => {
     confirmModalMessage.value = message
     confirmPrimaryLabel.value = primaryLabel
+    confirmSecondaryLabel.value = secondaryLabel
+    confirmPrimaryIsSafe.value = primaryIsSafe
     confirmModalOpen.value = true
     confirmResolver = resolve
     nextTick(() => confirmPrimaryBtn.value?.focus())
@@ -436,13 +462,6 @@ function handleUpdateStatus(status: UpdateStatus): void {
   updateStatus.value = status
 }
 
-/**
- * Ask the bun side whether an update is available and, if so, route it
- * through `handleUpdateStatus` so the snooze guard applies identically
- * whether this fires from the launch check or the periodic re-check.
- * Best-effort: a network blip or thrown error is swallowed, the next
- * check (launch or interval) will retry.
- */
 /**
  * Ask the bun side whether an update is available and, if so, route it
  * through `handleUpdateStatus` so the snooze guard applies identically
@@ -548,14 +567,54 @@ async function revertFile(): Promise<void> {
   }
 }
 
+// A recent file from the welcome screen. One that has moved or been deleted
+// drops off the list rather than failing the same way on every click.
+async function openRecent(path: string): Promise<void> {
+  let exists: boolean
+  try {
+    exists = await electrobun.rpc!.request.fileExists({ path })
+  } catch {
+    // No answer is not an answer: keep the entry
+    showExportStatus(false, `Could not open ${basename(path)}`)
+    return
+  }
+  if (!exists) {
+    showExportStatus(false, `${basename(path)} is no longer in ${tildify(dirname(path))}`)
+    await updateRecents({ removeFile: path })
+    return
+  }
+  await handleExternalOpen(path)
+}
+
 // A file the OS routed to us (Finder double-click / Open With / Dock drop).
 // Mirrors openFile() minus the dialog - the OS already chose the file.
+// A document open that launched the app waits on the bun side until this asks,
+// so it lands after the crash-restore prompt is answered instead of racing it.
+// Bun holds every open until a request succeeds, so a failed one is retried.
+async function takeLaunchDocument(): Promise<void> {
+  for (let attempt = 1; attempt <= LAUNCH_OPEN_ATTEMPTS; attempt++) {
+    try {
+      const { path } = await electrobun.rpc!.request.takePendingExternalOpen({})
+      if (path) void handleExternalOpen(path)
+      return
+    } catch (error) {
+      console.error(`Taking the launch document failed (attempt ${attempt}):`, error)
+      await new Promise((resolve) => setTimeout(resolve, LAUNCH_OPEN_RETRY_MS))
+    }
+  }
+}
+
 async function handleExternalOpen(path: string): Promise<void> {
   // A pending confirm (crash-restore prompt, quit modal) must not be stomped:
   // askConfirm force-resolves any pending resolver to false, which for the
   // restore prompt would silently discard the crash-recovery draft. Ignoring
-  // the open is the safer loss - the user can open the file again.
-  if (confirmModalOpen.value || quitModalOpen.value) return
+  // the open is the safer loss - the user can open the file again, so say so.
+  // (An open that launched the app waits until the restore prompt is answered;
+  // see takePendingExternalOpen in onMounted.)
+  if (confirmModalOpen.value || quitModalOpen.value) {
+    showExportStatus(false, `Close the dialog first, then open ${basename(path)} again`)
+    return
+  }
   try {
     const file = await electrobun.rpc!.request.readFile({ path })
     if (!file) {
@@ -569,11 +628,7 @@ async function handleExternalOpen(path: string): Promise<void> {
     saveToLocalStorage()
     if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
     getLayout()
-    try {
-      await electrobun.rpc!.request.updateSettings({ lastOpenedFile: path })
-    } catch {
-      // Settings update is best-effort
-    }
+    await updateRecents({ addFile: path })
   } catch (error) {
     console.error('External open failed:', error)
     showExportStatus(false, `Could not open ${basename(path)}`)
@@ -594,9 +649,7 @@ async function openFile(): Promise<void> {
     if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
     getLayout()
 
-    await electrobun.rpc!.request.updateSettings({
-      lastOpenedFile: result.path,
-    })
+    await updateRecents({ addFile: result.path })
   } catch (error) {
     console.error('Failed to open file:', error)
     // Electrobun rejections can arrive as a bare string (not an Error instance),
@@ -670,14 +723,9 @@ async function applySaveResult(result: SaveResult, didConfirm: boolean): Promise
     isDirty.value = false
     clearDraftStorage()
     pendingTargetDir.value = null
-    const newRecents = addRecentDir(recentSaveDirs.value, dirname(result.path))
-    recentSaveDirs.value = newRecents
-    try {
-      await electrobun.rpc!.request.updateSettings({ lastOpenedFile: result.path, recentSaveDirs: newRecents })
-    } catch {
-      // Best-effort: a settings-write failure must not turn a successful save into
-      // a reported failure or block the quit flow.
-    }
+    // Best-effort inside: a settings failure must not turn a successful save
+    // into a reported failure or block the quit flow.
+    await updateRecents({ addFile: result.path, addSaveDir: dirname(result.path) })
     // No success toast: the Edited badge clearing is the save confirmation. Failures still toast.
     return true
   }
@@ -813,13 +861,6 @@ async function chooseFolderClick(): Promise<void> {
   if (dir) draftDir.value = dir // cancel/fail ⇒ draftDir unchanged, the select keeps its current value
 }
 
-// MINIMAL: Where shows absolute paths; home-relative (~) prettifying needs the home dir from bun, deferred.
-// Display-only: collapse the home dir to ~ in the Where menu (macOS-only app,
-// so the /Users/<name> prefix is reliable). Option values stay full paths.
-function tildify(path: string): string {
-  return path.replace(/^\/Users\/[^/]+(?=\/|$)/, '~')
-}
-
 const whereOptions = computed(() => {
   const opts: string[] = []
   // Effective (open-time) folder is always offered, even after the user picks another.
@@ -829,28 +870,13 @@ const whereOptions = computed(() => {
   return opts
 })
 
-// Reopen the last file from disk, or leave the welcome screen (no document) as-is.
-// `settings` is passed in from onMounted - do NOT call getSettings again here.
-async function reopenLast(settings: Settings): Promise<void> {
-  const lastPath = settings.lastOpenedFile
-  if (!lastPath) return
-  try {
-    const file = await electrobun.rpc!.request.readFile({ path: lastPath })
-    if (!file) return  // missing or unreadable
-    // Supply the path explicitly - readFile returns content+filename only.
-    // Passing lastPath here is what makes the reopened file round-trip on Save
-    // without falling back to a new copy in ~/Documents/Tabbo. No explicit
-    // compile: the launch compile in onMounted renders the reopened file.
-    loadFileIntoEditor(file.content, file.filename, lastPath)
-  } catch {
-    // File unreadable - leave the welcome screen (no document loaded)
-  }
-}
-
 // On mount: if a draft exists (⇒ genuine unsaved work from an unclean exit), offer
-// to restore it; otherwise reopen the last file from disk (or stay on the welcome screen).
-// `settings` is passed in from onMounted - do NOT call getSettings again here.
-async function restoreSession(settings: Settings): Promise<void> {
+// to restore it; otherwise stay on the welcome screen, whose recent-files list
+// reopens anything in one click. Launch deliberately doesn't reopen the last
+// file: Electrobun loses a document open that launches the app, so
+// reopening the last file made a Finder double-click show the wrong score.
+async function restoreSession(): Promise<void> {
+
   let draftContent: string | null = null
   try {
     draftContent = localStorage.getItem(STORAGE_KEYS.DRAFT)
@@ -859,7 +885,9 @@ async function restoreSession(settings: Settings): Promise<void> {
   }
 
   if (draftContent) {
-    const restore = await askConfirm('Restore unsaved changes from your last session?', 'Restore')
+    // Declining discards the draft, so the button says so rather than "Cancel",
+    // and only that button declines: dismissing the dialog restores.
+    const restore = await askConfirm('Restore unsaved changes from your last session?', 'Restore', 'Discard', true)
     if (restore) {
       // Load the draft - mirrors what loadFromLocalStorage did.
       const savedFilename = localStorage.getItem(STORAGE_KEYS.FILENAME)
@@ -883,10 +911,7 @@ async function restoreSession(settings: Settings): Promise<void> {
       if (savedDir) pendingTargetDir.value = savedDir
     } else {
       clearDraftStorage()
-      await reopenLast(settings)
     }
-  } else {
-    await reopenLast(settings)
   }
 }
 
@@ -895,12 +920,6 @@ async function clearDraft(): Promise<void> {
     return
   }
   clearDraftStorage()
-  // Clear lastOpenedFile so reopen-last never resurrects a file the user left for New.
-  try {
-    await electrobun.rpc!.request.updateSettings({ lastOpenedFile: null })
-  } catch {
-    // Settings update is best-effort; don't block the New action
-  }
   // New creates a blank untitled buffer. skipCompile:true - compiling empty
   // content is a hard engine error ("zero length file"); the empty-preview
   // placeholder stands in until the first keystroke (which compiles).
@@ -908,7 +927,7 @@ async function clearDraft(): Promise<void> {
 }
 
 // Close the current document and return to the welcome screen. Mirrors New's
-// discard-confirm + draft/lastOpenedFile clearing, but drops hasDocument.
+// discard-confirm + draft clearing, but drops hasDocument.
 // loadFileIntoEditor owns the guard-before-assign reset (content, filename,
 // path, dirty, layout) - correct even for the no-op empty case - and sets
 // hasDocument true; flipping it false immediately after is synchronous, so Vue
@@ -919,13 +938,6 @@ async function closeDocument(): Promise<void> {
     return
   }
   clearDraftStorage()
-  // Clear lastOpenedFile so a relaunch stays on the welcome screen rather than
-  // reopening the file just closed.
-  try {
-    await electrobun.rpc!.request.updateSettings({ lastOpenedFile: null })
-  } catch {
-    // Settings update is best-effort; don't block Close
-  }
   loadFileIntoEditor('', 'untitled.tab', null, { skipCompile: true })
   hasDocument.value = false
 }
@@ -949,7 +961,7 @@ function resolveQuit(choice: 'save' | 'discard' | 'cancel'): void {
   resolve?.(choice)
 }
 
-async function handleWindowAction(action: 'quit' | 'close'): Promise<void> {
+async function handleQuit(): Promise<void> {
   if (windowActionInFlight) return
   windowActionInFlight = true
   try {
@@ -958,14 +970,14 @@ async function handleWindowAction(action: 'quit' | 'close'): Promise<void> {
     if (isDirty.value) saveToLocalStorage()
 
     if (!isDirty.value) {
-      electrobun.rpc!.send.windowActionResponse({ action, proceed: true })
+      electrobun.rpc!.send.windowActionResponse({ proceed: true })
       return
     }
 
     const choice = await askQuitChoice()
 
     if (choice === 'cancel') {
-      electrobun.rpc!.send.windowActionResponse({ action, proceed: false })
+      electrobun.rpc!.send.windowActionResponse({ proceed: false })
       return
     }
 
@@ -975,7 +987,7 @@ async function handleWindowAction(action: 'quit' | 'close'): Promise<void> {
       const saved = await saveFile({ skipCopyConfirm: true })
       if (!saved) {
         // Cancelled at the overwrite prompt or the write errored - stay open.
-        electrobun.rpc!.send.windowActionResponse({ action, proceed: false })
+        electrobun.rpc!.send.windowActionResponse({ proceed: false })
         return
       }
       // applySaveResult already set isDirty=false and cleared the draft.
@@ -985,7 +997,7 @@ async function handleWindowAction(action: 'quit' | 'close'): Promise<void> {
       clearDraftStorage()
     }
 
-    electrobun.rpc!.send.windowActionResponse({ action, proceed: true })
+    electrobun.rpc!.send.windowActionResponse({ proceed: true })
   } finally {
     windowActionInFlight = false
   }
@@ -1027,22 +1039,21 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeyboardShortcut)
   window.addEventListener('pointerdown', onGlobalPointerDown, true)
 
-  // Load persisted settings - captured here and threaded into restoreSession
-  // so getSettings is only called once.
-  let settings: Settings = { fontSize: 12, theme: 'light' as const, lastOpenedFile: null, recentSaveDirs: [] }
   try {
-    settings = await electrobun.rpc!.request.getSettings({})
+    const settings = await electrobun.rpc!.request.getSettings({})
     fontSize.value = settings.fontSize
     recentSaveDirs.value = settings.recentSaveDirs ?? []
+    recentFiles.value = settings.recentFiles ?? []
   } catch {
     // Settings unavailable (e.g. HMR mode) - use defaults
   }
 
   try {
-    await restoreSession(settings)
+    await restoreSession()
   } catch (error) {
     console.error('Session restore failed:', error)
   }
+  void takeLaunchDocument()
   autoSaveTimer = setInterval(saveToLocalStorage, AUTO_SAVE_INTERVAL_MS)
   window.addEventListener('blur', saveToLocalStorage)
 
@@ -1120,30 +1131,34 @@ onUnmounted(() => {
     <main ref="splitContainer" class="flex-1 flex overflow-hidden relative">
       <div
         v-if="errors.length > 0"
-        class="absolute top-0 left-0 right-0 z-20 bg-error-surface border border-error-soft/45 rounded-lg px-4 py-2 shadow-sm"
+        ref="errorBanner"
+        class="banner bg-error-surface border-error-soft/45 text-error-ink"
       >
-        <div v-for="(error, index) in errors" :key="index" class="text-error-ink text-sm">
-          <span v-if="error.line" class="font-mono text-error-soft">Line {{ error.line }}: </span>{{ error.message }}
+        <div v-for="(error, index) in errors" :key="index">
+          <span v-if="error.line" class="text-error-soft">Line {{ error.line }}: </span>{{ error.message }}
         </div>
       </div>
-      <div
-        v-if="exportStatus"
-        class="absolute top-0 left-0 right-0 z-20 px-4 py-2 shadow-sm text-sm"
-        :class="exportStatus.success
-          ? 'bg-raise border border-hairline text-ink'
-          : 'bg-error-surface border border-error-soft/45 text-error-ink'"
-      >
-        {{ exportStatus.message }}
-      </div>
+      <Transition name="rise">
+        <div
+          v-if="exportStatus"
+          class="banner"
+          :class="exportStatus.success
+            ? 'bg-raise border-hairline text-ink'
+            : 'bg-error-surface border-error-soft/45 text-error-ink'"
+        >
+          {{ exportStatus.message }}
+        </div>
+      </Transition>
       <template v-if="hasDocument">
       <div
-        class="w-full md:w-[var(--editor-width)] md:shrink-0 bg-pane"
+        class="fade-in w-full md:w-[var(--editor-width)] md:shrink-0 bg-pane"
         :style="{ '--editor-width': editorWidthPct + '%' }"
         :class="activeTab === 'editor' ? 'block' : 'hidden md:block'"
       >
         <TabCodeEditor
           ref="editorRef"
           v-model="tabContent"
+          :bottom-inset="errorBannerInset"
           :error-lines="errorLines"
           :warn-lines="titleWarnLines"
           :font-size="fontSize"
@@ -1153,7 +1168,7 @@ onUnmounted(() => {
             <div class="relative">
               <button
                 @click="openTitleMenu()"
-                class="px-3 py-1.5 text-sm font-medium text-ink hover:bg-raise rounded transition-colors flex items-center gap-1"
+                class="btn text-ink hover:bg-raise flex items-center gap-1"
                 aria-label="Document name and location"
               >
                 <span>{{ currentFilename }}</span>
@@ -1165,9 +1180,9 @@ onUnmounted(() => {
                 </svg>
               </button>
 
-              <template v-if="titleMenuOpen">
-                <div class="title-menu-backdrop" @click="commitTitleMenu" />
-                <div class="title-menu-popover" @click.stop>
+              <div v-if="titleMenuOpen" class="title-menu-backdrop" @click="commitTitleMenu" />
+              <Transition name="pop">
+                <div v-if="titleMenuOpen" class="title-menu-popover" @click.stop>
                   <label class="title-menu-row">
                     <span class="title-menu-label">Name</span>
                     <span class="title-menu-input title-menu-name-field">
@@ -1202,7 +1217,7 @@ onUnmounted(() => {
                     </button>
                   </div>
                 </div>
-              </template>
+              </Transition>
             </div>
           </template>
         </TabCodeEditor>
@@ -1219,7 +1234,7 @@ onUnmounted(() => {
         aria-orientation="vertical"
         aria-label="Resize editor and preview"
       />
-      <div class="w-full md:flex-1 md:min-w-0 bg-app" :class="activeTab === 'preview' ? 'block' : 'hidden md:block'">
+      <div class="fade-in w-full md:flex-1 md:min-w-0 bg-app" :class="activeTab === 'preview' ? 'block' : 'hidden md:block'">
         <TabPreview
           ref="previewRef"
           :layout="layoutResult"
@@ -1232,6 +1247,8 @@ onUnmounted(() => {
       </template>
       <WelcomeScreen
         v-else
+        :recent-files="recentFiles"
+        @open-recent="openRecent"
         @new="clearDraft"
         @open="openFile"
         @template="showTemplatePicker = true"
@@ -1239,27 +1256,29 @@ onUnmounted(() => {
     </main>
 
     <!-- New from Template picker (opened from the File menu) -->
-    <div
-      v-if="showTemplatePicker"
-      ref="templatePickerRoot"
-      tabindex="-1"
-      class="fixed inset-0 z-50 flex items-center justify-center outline-none"
-      @keydown.esc="showTemplatePicker = false"
-    >
-      <div class="absolute inset-0 bg-black/40" @click="showTemplatePicker = false" />
-      <div class="relative bg-raise border border-hairline text-ink rounded-lg shadow-xl w-full max-w-sm mx-4 overflow-hidden" @click.stop>
-        <div class="px-4 py-3 border-b border-hairline text-sm font-medium text-ink">New from Template</div>
-        <button
-          v-for="example in examples"
-          :key="example.name"
-          @click="loadExample(example.name)"
-          class="w-full px-4 py-2.5 text-left hover:bg-hairline"
-        >
-          <div class="font-light text-ink text-sm mb-1">{{ example.name }}</div>
-          <div class="text-xs text-ink-soft font-extralight leading-relaxed">{{ example.description }}</div>
-        </button>
+    <Transition name="overlay">
+      <div
+        v-if="showTemplatePicker"
+        ref="templatePickerRoot"
+        tabindex="-1"
+        class="fixed inset-0 z-50 flex items-center justify-center outline-none"
+        @keydown.esc="showTemplatePicker = false"
+      >
+        <div class="absolute inset-0 bg-scrim" @click="showTemplatePicker = false" />
+        <div class="dialog max-w-sm overflow-hidden" @click.stop>
+          <div class="surface-title px-4 py-3 border-b border-hairline">New from Template</div>
+          <button
+            v-for="example in examples"
+            :key="example.name"
+            @click="loadExample(example.name)"
+            class="w-full px-4 py-2.5 text-left hover:bg-hairline transition-colors -outline-offset-2"
+          >
+            <div class="text-ink text-sm mb-1">{{ example.name }}</div>
+            <div class="text-xs text-ink-soft leading-relaxed">{{ example.description }}</div>
+          </button>
+        </div>
       </div>
-    </div>
+    </Transition>
 
     <HelpPanel :is-open="showHelpPanel" @close="showHelpPanel = false" />
 
@@ -1276,70 +1295,51 @@ onUnmounted(() => {
       @dismiss-error="dismissUpdateError"
     />
 
-    <div
-      v-if="confirmModalOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center"
-      @keydown.esc="resolveConfirm(false)"
-    >
-      <div class="absolute inset-0 bg-black/40" @click="resolveConfirm(false)" />
+    <Transition name="overlay">
       <div
-        class="relative bg-raise border border-hairline text-ink rounded-lg shadow-xl p-6 max-w-sm w-full mx-4"
-        @click.stop
+        v-if="confirmModalOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center"
+        @keydown.esc="resolveConfirm(confirmPrimaryIsSafe)"
       >
-        <p class="text-sm text-ink mb-5 break-words">{{ confirmModalMessage }}</p>
-        <div class="flex justify-end gap-3">
-          <button
-            @click="resolveConfirm(false)"
-            class="px-3 py-1.5 text-sm font-medium border border-hairline text-ink-soft hover:bg-hairline rounded transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            ref="confirmPrimaryBtn"
-            @click="resolveConfirm(true)"
-            class="px-3 py-1.5 text-sm font-semibold bg-error-soft text-on-accent hover:bg-error-soft/90 rounded transition-colors"
-          >
-            {{ confirmPrimaryLabel }}
-          </button>
+        <div class="absolute inset-0 bg-scrim" @click="resolveConfirm(confirmPrimaryIsSafe)" />
+        <div class="dialog p-6 max-w-sm" @click.stop>
+          <p class="text-sm text-ink mb-5 break-words">{{ confirmModalMessage }}</p>
+          <div class="flex justify-end gap-3">
+            <button @click="resolveConfirm(false)" class="btn btn-secondary">
+              {{ confirmSecondaryLabel }}
+            </button>
+            <button ref="confirmPrimaryBtn" @click="resolveConfirm(true)" :class="['btn', confirmPrimaryIsSafe ? 'btn-primary' : 'btn-danger']">
+              {{ confirmPrimaryLabel }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Transition>
 
     <!-- Three-way quit modal: Save / Discard / Cancel -->
-    <div
-      v-if="quitModalOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center"
-      @keydown.esc="resolveQuit('cancel')"
-    >
-      <div class="absolute inset-0 bg-black/40" @click="resolveQuit('cancel')" />
+    <Transition name="overlay">
       <div
-        class="relative bg-raise border border-hairline text-ink rounded-lg shadow-xl p-6 max-w-sm w-full mx-4"
-        @click.stop
+        v-if="quitModalOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center"
+        @keydown.esc="resolveQuit('cancel')"
       >
-        <p class="text-sm text-ink mb-5">You have unsaved changes. Save before closing?</p>
-        <div class="flex justify-end gap-3">
-          <button
-            @click="resolveQuit('cancel')"
-            class="px-3 py-1.5 text-sm font-medium border border-hairline text-ink-soft hover:bg-hairline rounded transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            @click="resolveQuit('discard')"
-            class="px-3 py-1.5 text-sm font-medium text-error-soft hover:bg-error-soft/10 rounded transition-colors"
-          >
-            Discard
-          </button>
-          <button
-            ref="quitSaveBtn"
-            @click="resolveQuit('save')"
-            class="px-3 py-1.5 text-sm font-semibold bg-accent text-on-accent hover:bg-accent-soft rounded transition-colors"
-          >
-            Save
-          </button>
+        <div class="absolute inset-0 bg-scrim" @click="resolveQuit('cancel')" />
+        <div class="dialog p-6 max-w-sm" @click.stop>
+          <p class="text-sm text-ink mb-5">You have unsaved changes. Save before closing?</p>
+          <div class="flex justify-end gap-3">
+            <button @click="resolveQuit('cancel')" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button @click="resolveQuit('discard')" class="btn btn-danger-quiet">
+              Discard
+            </button>
+            <button ref="quitSaveBtn" @click="resolveQuit('save')" class="btn btn-primary">
+              Save
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
 
@@ -1366,8 +1366,8 @@ body {
   max-width: calc(100vw - 24px);
   background: var(--color-raise);
   border: 1px solid var(--color-hairline);
-  border-radius: 0.625rem;
-  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.6);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-popover);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
@@ -1383,10 +1383,11 @@ body {
   font-size: 0.875rem;
   padding: 4px 6px;
   border: 1px solid var(--color-hairline);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   outline: none;
   background: var(--color-head);
   color: var(--color-ink);
+  transition: border-color var(--motion-fast) var(--motion-ease);
 }
 .title-menu-input:focus,
 .title-menu-name-field:focus-within { border-color: var(--color-accent); }
@@ -1420,9 +1421,9 @@ body {
   color: var(--color-ink);
   background: var(--color-head);
   border: 1px solid var(--color-hairline);
-  border-radius: 6px;
-  cursor: pointer;
+  border-radius: var(--radius-control);
   white-space: nowrap;
+  transition: background-color var(--motion-fast) var(--motion-ease);
 }
 .title-menu-choose:hover { background: var(--color-hairline); }
 /* Edited marker: appears instantly on edit; on save it fades AND collapses its box, so the
@@ -1439,4 +1440,7 @@ body {
   max-width: 3rem;
 }
 .edited-fade-leave-to { opacity: 0; max-width: 0; margin-left: -0.25rem; }
+@media (prefers-reduced-motion: reduce) {
+  .edited-fade-leave-active { transition: none; }
+}
 </style>

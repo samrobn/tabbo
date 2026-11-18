@@ -107,7 +107,7 @@ export function startCaptureWorker(deps: {
         }
 
         // Forward-compatibility: unknown types are silently skipped at warn level.
-        console.warn('[capture-worker] unrecognised message type:', typed.type)
+        console.warn('[capture-worker] unrecognised message type:', msg.type)
       } catch (err) {
         if (abortController.signal.aborted) return
 

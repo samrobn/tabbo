@@ -2,7 +2,7 @@ import { join, basename } from "path";
 import { mkdirSync, existsSync } from "fs";
 import { deriveTabFilename, resolveSaveTarget } from "./filename-utils";
 import { tmpdir } from "os";
-import { Utils } from "electrobun/bun";
+import { Utils } from "electrobun/main";
 import type { FileInfo, SaveResult, PdfExportResult } from "../shared/rpc-types";
 import { exportPdfToDir } from "./pdf-export";
 import { toErrorMessage } from "./error-utils";

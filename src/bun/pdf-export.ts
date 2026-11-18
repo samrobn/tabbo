@@ -68,7 +68,7 @@ export async function compileToPdf(content: string): Promise<PdfPipelineResult> 
 		const tabProc = Bun.spawn(
 			[getTabBinary(), "-no-includes", "-o", outputPs, inputFile],
 			{
-				env: { ...Bun.env, TABFONTS: getFontsDir() },
+				env: { ...process.env, TABFONTS: getFontsDir() },
 				stdout: "pipe",
 				stderr: "pipe",
 			},
@@ -77,6 +77,16 @@ export async function compileToPdf(content: string): Promise<PdfPipelineResult> 
 		const tabTimeout = setTimeout(() => tabProc.kill(), TAB_TIMEOUT_MS);
 		const exitCode = await tabProc.exited;
 		clearTimeout(tabTimeout);
+
+		// Only our timeout kills it. Subprocess.killed reads true after a normal
+		// exit too, and a run that exits 0 at the deadline must still count.
+		if (exitCode !== 0 && tabProc.signalCode === "SIGTERM") {
+			return {
+				success: false,
+				pdf: null,
+				errors: [{ message: `Typesetting timed out after ${TAB_TIMEOUT_MS / 1000}s.` }],
+			};
+		}
 
 		if (exitCode !== 0) {
 			const stderr = await new Response(tabProc.stderr).text();
@@ -108,8 +118,9 @@ export async function compileToPdf(content: string): Promise<PdfPipelineResult> 
 				pdf: null,
 				errors: [
 					{
-						message:
-							"PDF conversion failed (PostScript was generated successfully)",
+						message: gsProc.signalCode === "SIGTERM"
+							? `PDF conversion timed out after ${GS_TIMEOUT_MS / 1000}s (PostScript was generated successfully)`
+							: "PDF conversion failed (PostScript was generated successfully)",
 					},
 				],
 			};

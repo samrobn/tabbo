@@ -7,6 +7,7 @@
 
 # C++ object files
 engine/*.o
+engine/*.d
 
 # Executables
 *.exe
@@ -19,9 +20,6 @@ engine/tab
 .vscode/
 compile_commands.json
 engine/.cache/
-
-# Local tool state
-.claude/scheduled_tasks.lock
 
 # Vim
 [._]*.s[a-w][a-z]
@@ -37,24 +35,20 @@ Session.vim
 
 # evals reference outputs (override blanket *.tab rule above)
 !evals/fixtures/*.tab
+!evals/manual/*.tab
+!engine/examples/*.tab
 !evals/reference/tab
 !evals/reference/fonts/**
 evals/runs/
 evals/dev/
-
-# Local configuration
-.env
-
-# macOS
-.DS_Store
 
 # Private documentation
 docs-private/
 *.private.md
 *-PRIVATE.md
 
-# Dependencies
-node_modules/
+# Dependencies (no trailing slash: a worktree's symlinked node_modules is a file, not a dir)
+node_modules
 bun.lockb
 
 # Build output
@@ -65,3 +59,34 @@ dist-releases/
 
 # TypeScript
 *.tsbuildinfo
+
+# secrets and local config
+.env
+.env.*
+!.env.example
+!.env.*.example
+.envrc
+*.pem
+*.key
+
+# editor / OS
+.DS_Store
+.idea/
+
+# AI agents - commit the team's agent files, keep personal config local
+/.claude/*
+!/.claude/CLAUDE.md
+!/.claude/rules/
+!/.claude/settings.json
+!/.claude/agents/
+!/.claude/commands/
+!/.claude/hooks/
+!/.claude/skills/
+!/.claude/local/
+/.claude/local/*
+!/.claude/local/.gitkeep
+CLAUDE.local.md
+
+# Electrobun 2.x: Hutch devkit projection, and build temp a failed hook leaves behind
+.hutch/
+.cottontail-tmp/
