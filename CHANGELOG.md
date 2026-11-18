@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.10] - 2026-11-18
+
+### Added
+
+- The welcome screen lists your recently opened files; click one to reopen it. A file that has moved or been deleted drops off the list.
+- Tabbo remembers its window size and position between launches.
+- The editor colours Q/@ editorial highlights to match the preview: grey, or red with `-highlightred`. Highlighted barlines get a tint so they stand out.
+- With `-highlightparen`, the live preview draws the parentheses around a highlighted note, as the PDF already did.
+
+### Changed
+
+- Tabbo now opens on the welcome screen instead of reopening the last file, so opening a file from Finder never shows a different score. The file you last had open appears in your recent files.
+- A smoother, more consistent look: dialogs, panels, menus, and messages fade or slide in, buttons and dialogs share one style, and keyboard focus shows a clear ring. Everything appears instantly when macOS Reduce Motion is on.
+- Error and export messages now appear at the bottom of the window, so they no longer cover the document name, and the editor can scroll past the end so the last line is never hidden.
+- The prompt to restore unsaved work after a crash now says Discard rather than Cancel, because declining it discards the unsaved changes.
+- While an update downloads, the update window says so but no longer shows a percentage.
+
+### Fixed
+
+- Opening a `.tab` file from Finder while Tabbo is closed now opens that file, after a moment on the welcome screen.
+- Pressing Esc or clicking outside the prompt to restore unsaved work after a crash no longer deletes that work: it restores it, and only Discard discards.
+- A highlighted barline (`bQ`) in the preview no longer turns the notes after it grey; only the barline is highlighted, as in the PDF.
+- Long scores are fully syntax-coloured when you scroll far down, without a half-second delay.
+- A PDF export that takes too long now says it timed out, instead of reporting an unexplained failure.
+- The live preview recovers more reliably after the typesetter restarts, instead of showing an error or a result from earlier text.
+
 ## [0.1.0-alpha.9] - 2026-07-19
 
 ### Added

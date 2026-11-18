@@ -1,9 +1,18 @@
 <script setup lang="ts">
-defineEmits<{ new: []; open: []; template: [] }>()
+import { computed } from 'vue'
+import { basename, dirname, tildify } from '../../../shared/display-path'
+
+const props = withDefaults(defineProps<{ recentFiles?: string[] }>(), { recentFiles: () => [] })
+defineEmits<{ new: []; open: []; template: []; openRecent: [path: string] }>()
+
+const RECENT_SHOWN = 5
+const recents = computed(() =>
+  props.recentFiles.slice(0, RECENT_SHOWN).map((path) => ({ path, name: basename(path), folder: tildify(dirname(path)) })),
+)
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col items-center justify-center gap-9 bg-app text-ink select-none">
+  <div class="fade-in flex-1 flex flex-col items-center justify-center gap-9 bg-app text-ink select-none">
     <svg class="w-[346px] h-auto" viewBox="-2 -2 918 338" role="img" aria-label="Tabbo" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="72" height="34" rx="17" fill="#4a4d55"/>
       <rect x="84" y="0" width="84" height="34" rx="17" fill="#e0906a"/>
@@ -45,16 +54,29 @@ defineEmits<{ new: []; open: []; template: [] }>()
     <div class="flex flex-col gap-2 w-56">
       <button
         @click="$emit('new')"
-        class="px-4 py-2 text-sm font-semibold bg-accent text-on-accent hover:bg-accent-soft rounded transition-colors"
+        class="btn btn-primary px-4 py-2"
       >New file</button>
       <button
         @click="$emit('open')"
-        class="px-4 py-2 text-sm font-medium border border-hairline text-ink hover:bg-raise rounded transition-colors"
+        class="btn btn-secondary px-4 py-2 text-ink"
       >Open…</button>
       <button
         @click="$emit('template')"
-        class="px-4 py-2 text-sm font-medium border border-hairline text-ink hover:bg-raise rounded transition-colors"
+        class="btn btn-secondary px-4 py-2 text-ink"
       >New from template</button>
     </div>
+    <section v-if="recents.length" class="flex flex-col gap-1 w-72" aria-labelledby="welcome-recent">
+      <h2 id="welcome-recent" class="eyebrow px-2">Recent</h2>
+      <button
+        v-for="recent in recents"
+        :key="recent.path"
+        :title="recent.path"
+        @click="$emit('openRecent', recent.path)"
+        class="flex flex-col items-start px-2 py-1 rounded-control text-left hover:bg-hairline transition-colors"
+      >
+        <span class="text-sm text-ink truncate max-w-full">{{ recent.name }}</span>
+        <span class="text-xs text-ink-soft truncate max-w-full">{{ recent.folder }}</span>
+      </button>
+    </section>
   </div>
 </template>

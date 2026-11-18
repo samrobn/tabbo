@@ -63,6 +63,9 @@ WARNS = -Wtraditional -Wpointer-arith -Wcast-align -Wconversion -Waggregate-retu
 VPATH = src:src/input:src/output:src/layout:src/fonts:src/core
 
 CXXFLAGS = ${OPTIM} -DTFM_PATH=${TLOC} -Iinclude
+# Track header dependencies, so editing a header rebuilds every object that
+# includes it instead of linking stale objects (a changed vtable then crashes).
+CXXFLAGS += -MMD -MP
 #
 
 OBJS = args.o buffer.o dbg.o draw.o dvi.o dvi_f.o \
@@ -89,9 +92,14 @@ all:	tab
 tab:	${OBJS}
 	$(LD)  $(LDFLAGS) -o tab ${OBJS} -lm
 
+-include $(OBJS:.o=.d)
+# Objects built before the header tracking existed have no .d file; a changed
+# Makefile rebuilds them all once so every object gets one.
+${OBJS}: Makefile
+
 clean:
 	rm -f *~ *.dvi *.ps *.log
-	rm -f *.o
+	rm -f *.o *.d
 	rm -f *.bdf *gf
 
 pk_font.o:	include/pk_input.h include/pkfile.h

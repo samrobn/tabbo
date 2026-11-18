@@ -1,9 +1,7 @@
 import { join, relative } from "node:path";
 import { readdirSync, copyFileSync, existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 
-// run.ts is used only for its runFixture helper, not its binary resolution.
 // Golden generation always uses the upstream reference binary, not the local engine.
-import { runFixture } from "./run.ts";
 
 const GOLDENS_DIR = join(import.meta.dir, "goldens");
 const REFERENCE_DIR = join(import.meta.dir, "reference");
@@ -156,7 +154,6 @@ async function main(): Promise<void> {
 	warnOnGsVersionMismatch(getGsBinary());
 	console.log(`Run directory: ${runDir}\n`);
 
-	const gs = getGsBinary();
 	const [gsVersion] = await Promise.all([getGsVersion()]);
 	const renderedAt = new Date().toISOString();
 

@@ -34,6 +34,7 @@ evals/
   run.ts                      - Ghostscript harness (local engine: .tab -> .ps -> .pdf -> .png)
   regenerate-goldens.ts       - Overwrites evals/goldens/ using the upstream reference engine (Ghostscript)
   fixtures/                   - Frozen copies of engine/examples/*.tab
+  manual/                     - Small .tab files for checking highlights by eye in the running app (see manual/README.md)
   goldens/                    - Committed reference PNGs + MANIFEST.json (Ghostscript-rendered)
   reference/                  - Pre-built upstream reference binary and fonts (pinned commit)
   runs/                       - Gitignored per-run outputs

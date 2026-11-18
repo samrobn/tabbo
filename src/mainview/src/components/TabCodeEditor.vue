@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, shallowRef, nextTick } from 'vue'
-import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, drawSelection, Decoration, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, drawSelection, scrollPastEnd, Decoration, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { EditorState, Compartment, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
-import { tab } from '../codemirror/tab-language'
+import { tab, tabTags, editorialColours } from '../codemirror/tab-language'
 import { barRuler } from '../codemirror/bar-ruler'
 import { search, setSearchQuery, getSearchQuery, SearchQuery, findNext, findPrevious } from '@codemirror/search'
 import { currentMatchIndex, matchToSelect, type MatchRange } from '../../../shared/search-match'
@@ -21,6 +21,10 @@ const graphiteHighlight = HighlightStyle.define([
   { tag: tags.className, color: 'var(--syn-value)', fontWeight: 'var(--weight-mark)' },
   { tag: tags.variableName, color: 'var(--color-ink)' },
   { tag: [tags.bracket, tags.operator, tags.meta, tags.punctuation], color: 'var(--color-ink-soft)' },
+  // Same colours the preview and export use for Q/@ editorial highlights
+  { tag: tabTags.editorial, color: 'var(--syn-editorial, var(--syn-flag))', fontWeight: 'var(--weight-mark)' },
+  // Plain barlines are already dim grey in the editor, so a grey mark needs a tint behind it to stand out
+  { tag: tabTags.editorialBarline, color: 'var(--syn-editorial-barline)', backgroundColor: 'color-mix(in srgb, var(--syn-editorial-barline) 30%, transparent)', borderRadius: 'var(--radius-control)', fontWeight: 'var(--weight-mark)' },
 ])
 
 interface Props {
@@ -28,6 +32,9 @@ interface Props {
   errorLines?: number[]
   warnLines?: number[]
   fontSize?: number
+  // Height of anything floating over the editor's bottom edge (the error
+  // banner), read when CodeMirror scrolls the caret into view, so it is kept clear.
+  bottomInset?: () => number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -42,6 +49,8 @@ const emit = defineEmits<{
 }>()
 
 const editorContainer = ref<HTMLElement | null>(null)
+// The Q/@ mark colours depend on flags anywhere in the document
+const editorialMarkColours = computed(() => editorialColours(props.modelValue))
 const editorView = shallowRef<EditorView | null>(null)
 const languageConf = new Compartment()
 const fontSizeConf = new Compartment()
@@ -105,12 +114,19 @@ function scrollTopForLine(view: EditorView, fractionalLine: number): number {
   return block.top + withinLineFraction * block.height + view.documentPadding.top
 }
 
+// scrollPastEnd() pads the content by about a viewport so the last line can
+// clear the error banner. Fraction-based sync and the search rail measure the
+// document, so they leave that padding out.
+function docScrollHeight(view: EditorView): number {
+  return view.scrollDOM.scrollHeight - view.documentPadding.bottom
+}
+
 function setScrollPosition(position: ScrollPosition): void {
   const view = editorView.value
   if (!view) return
   const target = position.line !== null
     ? scrollTopForLine(view, position.line)
-    : scrollTopForFraction(position.fraction, view.scrollDOM.scrollHeight, view.scrollDOM.clientHeight)
+    : scrollTopForFraction(position.fraction, docScrollHeight(view), view.scrollDOM.clientHeight)
   view.scrollDOM.scrollTop = clampScrollTop(target, view.scrollDOM.scrollHeight, view.scrollDOM.clientHeight)
 }
 
@@ -363,7 +379,9 @@ const searchScrollbarRail = ViewPlugin.fromClass(class {
       line: view.state.doc.lineAt(match.from).number,
       active: match.from === sel.from && match.to === sel.to,
     }))
-    const markers = computeScrollbarMarkers(matchLines, totalLines, height)
+    const scrollHeight = view.scrollDOM.scrollHeight
+    const railHeight = scrollHeight > 0 ? height * docScrollHeight(view) / scrollHeight : height
+    const markers = computeScrollbarMarkers(matchLines, totalLines, railHeight)
     ctx.save()
     ctx.scale(dpr, dpr)
     for (const marker of markers) {
@@ -503,6 +521,9 @@ onMounted(() => {
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       languageConf.of(tab()),
+      EditorView.scrollMargins.of(() => ({ bottom: props.bottomInset?.() ?? 0 })),
+      // Let the last line scroll up clear of the error banner floating over the bottom
+      scrollPastEnd(),
       syntaxHighlighting(graphiteHighlight, { fallback: true }),
       errorLinesField,
       warnLinesField,
@@ -568,7 +589,7 @@ onMounted(() => {
     if (!view) return
     emit('scroll-position', {
       line: topVisibleLine(view),
-      fraction: scrollFraction(view.scrollDOM.scrollTop, view.scrollDOM.scrollHeight, view.scrollDOM.clientHeight),
+      fraction: scrollFraction(view.scrollDOM.scrollTop, docScrollHeight(view), view.scrollDOM.clientHeight),
     })
   }
   editorView.value.scrollDOM.addEventListener('scroll', onEditorScroll)
@@ -670,7 +691,7 @@ onUnmounted(() => {
       <slot name="header" />
     </div>
     <div class="relative flex-1 overflow-hidden flex flex-col" @mouseenter="isHovered = true" @mouseleave="isHovered = false">
-      <div ref="editorContainer" class="flex-1 overflow-hidden"></div>
+      <div ref="editorContainer" class="flex-1 overflow-hidden" :style="{ '--syn-editorial': editorialMarkColours.mark ?? undefined, '--syn-editorial-barline': editorialMarkColours.barline }"></div>
       <div v-if="searchOpen" class="tab-search" @keydown.esc.stop.prevent="closeSearch">
         <div class="tab-search-field">
           <input
@@ -715,12 +736,12 @@ onUnmounted(() => {
 /* Title-overflow warning line: amber/gold, distinct from the red error line
    (a line can carry both — the fields are independent). */
 .cm-titleOverflow {
-  background-color: rgba(201, 165, 104, 0.13) !important;
+  background-color: var(--color-gold-dim) !important;
   border-left: 3px solid var(--color-gold);
 }
 
 .cm-editor .cm-line.cm-titleOverflow {
-  background-color: rgba(201, 165, 104, 0.13);
+  background-color: var(--color-gold-dim);
 }
 
 /* Search-match scrollbar rail: fixed to the editor's right edge (not the OS
@@ -746,8 +767,11 @@ onUnmounted(() => {
   padding: 4px 6px;
   background: var(--color-raise);
   border: 1px solid var(--color-hairline);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-chip);
+  /* Entrance only, as a keyframe on mount: the bar still leaves the DOM the
+     moment search closes, so the refocus guard's timing is unchanged. */
+  animation: pop-in var(--motion-fast) var(--motion-ease);
 }
 .tab-search-field {
   position: relative;
@@ -755,15 +779,16 @@ onUnmounted(() => {
 }
 .tab-search-input {
   width: 12rem;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   /* Right padding reserves the strip the match-count overlay sits in, so the
      count never affects the bar's width or the buttons' position. */
   padding: 3px 4rem 3px 6px;
   background: var(--color-head);
   color: var(--color-ink);
   border: 1px solid var(--color-hairline);
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   outline: none;
+  transition: border-color var(--motion-fast) var(--motion-ease);
 }
 .tab-search-input::placeholder { color: var(--color-ink-soft); }
 .tab-search-input:focus { border-color: var(--color-accent); }
@@ -787,8 +812,8 @@ onUnmounted(() => {
   color: var(--color-ink-soft);
   background: transparent;
   border: none;
-  border-radius: 4px;
-  cursor: pointer;
+  border-radius: var(--radius-control);
+  transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
 }
 .tab-search-btn:hover:not(:disabled) { background: var(--color-hairline); color: var(--color-ink); }
 .tab-search-btn:disabled { color: var(--color-ink-faint); cursor: default; }

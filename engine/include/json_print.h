@@ -200,6 +200,8 @@ class json_print : public print {
     void emit_primitive(const JsonPrimitive &p);
     /* Map the base-class highlight state to a JSON highlight colour. */
     HighlightKind current_highlight() const;
+    void consume_highlight();
+    void emit_glyph(int char_code, HighlightKind highlight_kind);
 
     /* JSON serialisation */
     void write_json(const char *fname);

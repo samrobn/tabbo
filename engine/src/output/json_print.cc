@@ -43,6 +43,7 @@ json_print::json_print(font_list *font_array[], file_info *f)
     int i;
     f_a = font_array;
     f_i = f;
+    highlight_type = Gray;  /* as ps_print: a highlight set without a type is grey */
     npages = 0;
     current_page_num  = 0;
     current_system_num = 0;
@@ -301,18 +302,39 @@ void json_print::emit_primitive(const JsonPrimitive &p)
     current_system().primitives.push_back(p);
 }
 
+void json_print::emit_glyph(int char_code, HighlightKind highlight_kind)
+{
+    JsonPrimitive p;
+    p.type           = JPRIM_GLYPH;
+    p.highlight_kind = highlight_kind;
+    p.glyph_font_id  = curfont;
+    p.glyph_char_code = char_code;
+    p.glyph_x        = dvi_h;
+    p.glyph_y        = dvi_v_to_y(dvi_v);
+    emit_primitive(p);
+}
+
+/* ps_print clears the highlight after drawing the one primitive it marks
+ * (put_a_char, set_a_char, p_put_rule), so a highlight covers exactly one
+ * element. Without the same clear here, the next primitive inherited it: a
+ * bQ barline greyed the rhythm flag drawn after it in the preview only. */
+void json_print::consume_highlight()
+{
+    if (highlight == On) clear_highlight();
+}
+
 /* Mirror ps_print's highlight handling (put_a_char/set_a_char/p_put_rule):
  * when the author has marked an element with Q/@, stamp the emitted primitive
- * with its colour so the preview can render it like the exported PDF. Paren
- * highlight draws literal parens, not a colour, so it maps to HL_NONE here. */
+ * with its colour so the preview can render it like the exported PDF. Only
+ * put_a_char draws a Paren highlight as parens; set_a_char and p_put_rule fall
+ * through to grey for it, so it maps to grey here and put_a_char overrides. */
 HighlightKind json_print::current_highlight() const
 {
     if (highlight != On) return HL_NONE;
     switch (highlight_type) {
     case Red:  return HL_RED;
     case Blue: return HL_BLUE;
-    case Gray: return HL_GRAY;
-    default:   return HL_NONE;  /* Paren: handled as glyphs, not a colour */
+    default:   return HL_GRAY;  /* Gray, and Paren outside put_a_char */
     }
 }
 
@@ -466,14 +488,24 @@ void json_print::put_a_char(unsigned char c)
         }
     }
 
-    JsonPrimitive p;
-    p.type           = JPRIM_GLYPH;
-    p.highlight_kind = current_highlight();
-    p.glyph_font_id  = curfont;
-    p.glyph_char_code = char_code;
-    p.glyph_x        = dvi_h;
-    p.glyph_y        = dvi_v_to_y(dvi_v);
-    emit_primitive(p);
+    /* Paren highlight wraps the glyph in literal parens, placed exactly as
+     * ps_print::put_a_char places them, so the preview matches the export. */
+    const bool paren = highlight == On && highlight_type == Paren;
+    /* '(' and ')' sit at their ASCII codes in every font, the lute font's PUA
+     * table included, so they need no mapping. */
+    if (paren) {
+        moveh(-.08);
+        emit_glyph('(', HL_NONE);
+        moveh(.08);
+    }
+    emit_glyph(char_code, paren ? HL_NONE : current_highlight());
+    if (paren) {
+        const double width = f_a[curfont]->fnt->get_width(c);
+        moveh(width);
+        emit_glyph(')', HL_NONE);
+        moveh(-width);
+    }
+    consume_highlight();
 
     /* Matches PS gsave/show/grestore semantics — caller is responsible for
      * cursor positioning across composed glyphs.  Do not advance dvi_h here;
@@ -642,6 +674,7 @@ void json_print::set_a_char(unsigned char c)
     dvi_h += advance_dvi;
     /* Update expected next position */
     run_last_advance = dvi_h;
+    consume_highlight();
 }
 
 /* ================================================================
@@ -720,6 +753,7 @@ void json_print::p_put_rule(int w, int h)
     p.rule_width  = w;
     p.rule_height = h;
     emit_primitive(p);
+    consume_highlight();
 }
 
 /* ================================================================
@@ -806,6 +840,10 @@ void json_print::do_rtie(int bloc, int eloc)
  * Slash / beam marks
  * ================================================================ */
 
+/* No consume_highlight() here, unlike ps_print, whose put_slash draws through
+ * p_put_rule: by our reading of dvi_format (dvi_f.cc), no highlight can be
+ * pending when a grid closes - the letter loop clears it after every staff
+ * position, and only ornament lines sit between grid chords. */
 void json_print::put_slash(int bloc, int eloc, int count, struct file_info *f)
 {
     flush_run();

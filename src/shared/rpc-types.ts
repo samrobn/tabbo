@@ -177,11 +177,23 @@ export type PdfExportResult =
 	| { success: true; path: string }
 	| { success: false; path: null; message: string };
 
+/** How long either side waits for an RPC reply before giving up. */
+export const RPC_MAX_REQUEST_MS = 15_000;
+
+export interface RecentsChange {
+	addFile?: string;
+	removeFile?: string;
+	addSaveDir?: string;
+}
+
 export interface Settings {
 	fontSize: number;
 	theme: "light" | "dark";
-	lastOpenedFile: string | null;
 	recentSaveDirs: string[];
+	/** Most recently opened or saved documents, newest first. */
+	recentFiles: string[];
+	/** The main window's last size and position; bun-side only. */
+	windowFrame?: { x: number; y: number; width: number; height: number };
 }
 
 export type MenuAction =
@@ -196,7 +208,6 @@ export type MenuAction =
 	| "checkForUpdates"
 	| "find"
 	| "quitRequested"
-	| "closeRequested"
 	| "close";
 
 // ---------------------------------------------------------------------------
@@ -285,6 +296,11 @@ export type TabboRPC = {
 				params: Partial<Settings>;
 				response: Settings;
 			};
+			/** Add or remove recent entries; bun applies it to the stored lists. */
+			updateRecents: {
+				params: RecentsChange;
+				response: Settings;
+			};
 			/** Check for an available update. Returns version + changelog if found. */
 			checkForUpdate: {
 				params: Record<string, never>;
@@ -307,13 +323,23 @@ export type TabboRPC = {
 				params: Record<string, never>;
 				response: Record<string, never>;
 			};
+			/**
+			 * The OS document open that arrived before the webview was ready
+			 * (one that launched the app), or null. The webview asks once, after
+			 * it has mounted and restored its session; later opens are pushed as
+			 * `openExternalFile`.
+			 */
+			takePendingExternalOpen: {
+				params: Record<string, never>;
+				response: { path: string | null };
+			};
 		};
 		messages: {
 			/**
-			 * Webview confirms whether to proceed with a quit or close action.
-			 * Sent in response to a `quitRequested` / `closeRequested` menu action.
+			 * Webview confirms whether to proceed with a quit.
+			 * Sent in response to a `quitRequested` menu action.
 			 */
-			windowActionResponse: { action: "quit" | "close"; proceed: boolean };
+			windowActionResponse: { proceed: boolean };
 		};
 	}>;
 	webview: RPCSchema<{
@@ -322,9 +348,9 @@ export type TabboRPC = {
 			/** Bun pushes update lifecycle events to the webview as they occur. */
 			updateStatusChanged: { status: UpdateStatus };
 			/**
-			 * A file opened via the OS (Finder double-click, Open With, Dock drop).
-			 * Warm-only: opens that launch the app are dropped upstream (Electrobun
-			 * v1.16.0 registers the native handler after the event fires).
+			 * A file opened via the OS (Finder double-click, Open With, Dock drop)
+			 * once the webview is ready; an earlier one waits for
+			 * `takePendingExternalOpen`.
 			 */
 			openExternalFile: { path: string };
 		};

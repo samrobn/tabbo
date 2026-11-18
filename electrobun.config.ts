@@ -5,15 +5,14 @@ import pkg from "./package.json" with { type: "json" };
 // don't collide. Without this, AppleScript `tell application id "..."` and
 // LaunchServices both pick whichever instance is frontmost when multiple
 // channels are installed - which is the wrong one in dev workflows.
-// `electrobun dev` implies channel=dev; `electrobun build --env=<x>` is
-// explicit; everything else falls through to stable.
+// Hutch sets ELECTROBUN_BUILD_ENV when it evaluates this file (`electrobun dev`
+// gives dev, `--env=<x>` gives x); anything else falls through to stable.
 const VALID_CHANNELS = ["dev", "canary", "stable"] as const;
 type Channel = (typeof VALID_CHANNELS)[number];
 
 function detectChannel(): Channel {
-	if (process.argv[2] === "dev") return "dev";
-	const envArg = process.argv.find((arg) => arg.startsWith("--env="))?.split("=")[1];
-	return VALID_CHANNELS.includes(envArg as Channel) ? (envArg as Channel) : "stable";
+	const buildEnv = process.env.ELECTROBUN_BUILD_ENV;
+	return VALID_CHANNELS.includes(buildEnv as Channel) ? (buildEnv as Channel) : "stable";
 }
 
 const channel = detectChannel();
@@ -64,6 +63,8 @@ export default {
 			// The notarize gate mirrors Electrobun's notarizeAndStaple exactly: it
 			// needs a FULL credential triple (API key or Apple ID route), not just
 			// one var — a subset would flip the flag on and still exit(1) in the CLI.
+			// That is the 1.x CLI's behaviour; Hutch's (2.x) without credentials
+			// is unchecked, so the gating stays.
 			codesign: Boolean(process.env.ELECTROBUN_DEVELOPER_ID),
 			notarize: Boolean(
 				process.env.ELECTROBUN_DEVELOPER_ID &&

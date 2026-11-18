@@ -12,14 +12,14 @@ An early alpha - expect rough edges. Found something broken? [Open an issue](htt
 
 ### Install
 
-1. Download `stable-macos-arm64-Tabbo.dmg` from the [latest release](https://github.com/samrobn/tabbo/releases/latest).
+1. Download `macos-arm64-Tabbo.dmg` from the [latest release](https://github.com/samrobn/tabbo/releases/latest).
 2. Open the `.dmg` and drag Tabbo to Applications.
 
 Releases are signed and notarised, so the app opens without Gatekeeper workarounds. Updates land in-app: the update modal appears when a new release is available, downloads in the background, and restarts to apply.
 
 ### Editing and preview
 
-- Tabbo opens on a welcome screen when no file is loaded - start a new document, open one, or pick a template. Your last-opened file reopens automatically next launch.
+- Tabbo opens on a welcome screen when no file is loaded - start a new document, open one, or pick a template. Recently opened files are listed there for one-click reopening.
 - The editor highlights `.tab` syntax and rules a faint line at each barline; the preview typesets the full document live as you type.
 - Multi-page scores render every page in the preview, and the editor and preview scroll in sync (toggleable from the preview's zoom cluster).
 - `Cmd+F` opens find; compile errors surface at the top of the preview with line numbers.
@@ -73,8 +73,10 @@ open http://localhost:8000/docs/design-system.html
 
 ```bash
 bun install            # install dependencies
-bun run start          # build engine + gs + app, launch desktop app
+bun run start          # rebuild the engine if changed, vite build, package, and launch (reuses the prebuilt gs)
 bun run test           # run bun-side test suite
+bun run test:vue       # run the Vue component tests (vitest + jsdom)
+bun run typecheck      # type-check the app, evals, and build scripts (vue-tsc)
 cd engine && make      # build the tab engine binary in isolation
 bun run evals          # visual regression run against goldens
 ```
@@ -98,7 +100,9 @@ cd ../gs && bash build-gs.sh  # produces gs/gs-minimal (~25 MB, cached)
 cd ..
 ```
 
-After that, `bun run start` builds the Vite bundle, packages the app, and launches it; subsequent runs reuse the cached binaries.
+After that, `bun run start` builds the Vite bundle, packages the app, and launches it; subsequent runs rebuild the engine only if its sources changed and reuse the Ghostscript binary.
+
+The first `bun run start` or `bun run build` needs network access: it downloads Electrobun's build tool, Hutch, into `~/.hutch`. The start, build, typecheck, and Vue test scripts run `electrobun sync` first, which places the Electrobun SDK in `.hutch/devkit` for Vite and TypeScript.
 
 ## About this fork
 

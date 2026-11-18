@@ -157,9 +157,10 @@ function resetZoom() {
       @mouseenter="isHovered = true"
       @mouseleave="isHovered = false"
     >
-      <!-- Spinner: only when loading with no prior layout (first compile / empty state) -->
-      <div v-if="isLoading && !layout" class="flex flex-col items-center justify-center h-full gap-4">
-        <svg class="animate-spin h-12 w-12 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <!-- Spinner: only when loading with no prior layout (first compile / empty state).
+           Its entrance is deferred, so a compile that finishes quickly never flashes it. -->
+      <div v-if="isLoading && !layout" class="fade-in-deferred flex flex-col items-center justify-center h-full gap-3 text-sm">
+        <svg class="animate-spin motion-reduce:animate-none h-6 w-6 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
@@ -173,7 +174,7 @@ function resetZoom() {
         :container-width="containerWidth"
       />
       <!-- Empty placeholder: no layout and not loading -->
-      <div v-if="!layout && !isLoading" class="flex items-center justify-center h-full text-ink-soft">
+      <div v-if="!layout && !isLoading" class="flex items-center justify-center h-full text-sm text-ink-soft">
         {{ COMPILE_MESSAGES.EMPTY_PREVIEW }}
       </div>
     </div>
@@ -186,13 +187,13 @@ function resetZoom() {
          never move. -->
     <div
       v-if="layout"
-      class="absolute top-4 right-6 z-20 flex items-center gap-0.5 px-1 py-0.5 bg-raise border border-hairline rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.12)] text-xs transition-opacity opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+      class="absolute top-4 right-6 z-20 flex items-center gap-0.5 px-1 py-0.5 bg-raise border border-hairline rounded-chip shadow-chip text-xs transition-opacity opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
     >
       <button
         @click="emit('update:scrollSync', !scrollSync); syncJustToggled = true"
         @mouseleave="syncJustToggled = false"
         :aria-pressed="scrollSync"
-        class="group/sync p-1 rounded transition-colors text-ink-soft hover:text-accent hover:bg-[var(--color-accent-dim)]"
+        class="group/sync p-1 rounded-control transition-colors text-ink-soft hover:text-accent hover:bg-[var(--color-accent-dim)]"
         aria-label="Sync scrolling"
         title="Sync scrolling"
       >
@@ -209,7 +210,7 @@ function resetZoom() {
            reset-to-100% control. -->
       <button
         @click="resetZoom"
-        class="min-w-[2.75rem] text-right px-1 text-ink hover:bg-hairline rounded tabular-nums"
+        class="min-w-[2.75rem] text-right px-1 text-ink hover:bg-hairline rounded-control transition-colors tabular-nums"
         aria-label="Reset to 100%"
         title="Reset to 100%"
       >
@@ -219,7 +220,7 @@ function resetZoom() {
         @click="zoomOut"
         :disabled="!canZoomOut"
         :class="[
-          'p-1 rounded transition-colors',
+          'p-1 rounded-control transition-colors',
           !canZoomOut ? 'text-ink-faint cursor-not-allowed' : 'text-ink-soft hover:text-ink hover:bg-hairline'
         ]"
         aria-label="Zoom out"
@@ -233,7 +234,7 @@ function resetZoom() {
         @click="zoomIn"
         :disabled="!canZoomIn"
         :class="[
-          'p-1 rounded transition-colors',
+          'p-1 rounded-control transition-colors',
           !canZoomIn ? 'text-ink-faint cursor-not-allowed' : 'text-ink-soft hover:text-ink hover:bg-hairline'
         ]"
         aria-label="Zoom in"

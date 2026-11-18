@@ -1,10 +1,12 @@
-import Electrobun, { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
+import Electrobun, { BrowserView, BrowserWindow, Screen, Updater, Utils } from "electrobun/main";
 import { fileURLToPath } from "node:url";
 import { getEngineWorker } from "./engine-worker";
 import { openTabFile, saveTabFile, fileExists, readTabFile, previewSaveTarget, chooseFolder, exportPdfFromContent, getCapturesDir } from "./file-manager";
-import { loadSettings, updateSettings } from "./settings";
+import { loadSettings, updateRecents, updateSettings } from "./settings";
 import { setupMenu } from "./menu";
+import { DEFAULT_WINDOW_FRAME, fillsADisplay, isRestorable, usableFrame } from "./window-frame";
 import type { TabboRPC, MenuAction } from "../shared/rpc-types";
+import { RPC_MAX_REQUEST_MS } from "../shared/rpc-types";
 import { DEV_SERVER_PORT, DEV_SERVER_URL, probeViteServer } from "./vite-probe";
 import {
 	checkForUpdate,
@@ -34,8 +36,14 @@ async function getMainViewUrl(channel: string): Promise<string> {
 	return "views://mainview/index.html";
 }
 
+// A document open that arrives before the webview has asked for one (the open
+// that launched the app) waits here, so it never depends on a push landing
+// after the page has loaded. See the open-url handler.
+let pendingExternalOpen: string | null = null;
+let webviewTookPendingOpen = false;
+
 const rpc = BrowserView.defineRPC<TabboRPC>({
-	maxRequestTime: 15_000,
+	maxRequestTime: RPC_MAX_REQUEST_MS,
 	handlers: {
 		requests: {
 			getLayout: async ({ content }) => getEngineWorker().getLayout(content),
@@ -50,6 +58,7 @@ const rpc = BrowserView.defineRPC<TabboRPC>({
 			readFile: ({ path }) => readTabFile(path),
 			getSettings: async () => loadSettings(),
 			updateSettings: async (partial) => updateSettings(partial),
+			updateRecents: async (change) => updateRecents(change),
 			checkForUpdate: async () => checkForUpdate(),
 			startUpdateDownload: async () => {
 				// Fire-and-forget: progress events arrive via updateStatusChanged
@@ -57,38 +66,86 @@ const rpc = BrowserView.defineRPC<TabboRPC>({
 				return {};
 			},
 			applyDownloadedUpdate: async () => {
-				// On success the process replaces itself and never resolves;
-				// on failure the rejection propagates to the webview's catch
-				// so the Restart button can recover from a stuck-applying state.
+				// On success the app quits and the helper relaunches it; on
+				// failure the rejection propagates to the webview's catch so
+				// the Restart button can recover from a stuck-applying state.
 				await applyDownloadedUpdate();
 				return {};
 			},
+			takePendingExternalOpen: async () => {
+				webviewTookPendingOpen = true;
+				const path = pendingExternalOpen;
+				pendingExternalOpen = null;
+				return { path };
+			},
 		},
 		messages: {
-			windowActionResponse: ({ action, proceed }) => {
-				// mainWindow exists by the time any windowActionResponse arrives: the RPC
-				// connects only after the webview loads, which requires the window. The guard
-				// in performWindowAction is belt-and-braces.
-				if (proceed) performWindowAction(action);
+			windowActionResponse: ({ proceed }) => {
+				// Utils.quit() runs Electrobun's full shutdown sequence (before-quit event,
+				// native stop, force-exit).
+				if (proceed) Utils.quit();
 			},
 		},
 	},
 });
 
-const channel = await Updater.localInfo.channel();
+// Electrobun 2.x rejects here if its native updater can't be configured; that
+// must not stop the window opening, so fall back to the channel with no dev tools.
+const channel = await Updater.localInfo.channel().catch((error: unknown) => {
+	console.error("[tabbo] Could not read the update channel:", error);
+	return "stable";
+});
 const url = await getMainViewUrl(channel);
+
+const settings = await loadSettings();
+
+const displayWorkAreas = () => Screen.getAllDisplays().map((display) => display.workArea);
+const displayBounds = () => Screen.getAllDisplays().map((display) => display.bounds);
+
+const savedFrame = usableFrame(settings.windowFrame);
 
 const mainWindow = new BrowserWindow({
 	title: "Tabbo",
 	url,
-	frame: {
-		width: 1200,
-		height: 800,
-		x: 100,
-		y: 100,
-	},
+	frame: savedFrame ?? DEFAULT_WINDOW_FRAME,
 	rpc,
 });
+
+// Display geometry is read only once the window exists. Electrobun reads it with
+// AppKit off the main thread, and doing that before the first window can win a
+// race for the window-server connection and leave the window deaf to all input
+// (electrobun issue 598, measured on 2.0.5; 1.18 calls the same native display
+// function straight from bun, so it is assumed to share the race). A saved
+// frame on a display that has gone moves to the default - without saving the
+// default over it, so the window returns there when the display does.
+let showingFallbackFrame = false;
+if (savedFrame && !isRestorable(savedFrame, displayWorkAreas())) {
+	const { x, y, width, height } = DEFAULT_WINDOW_FRAME;
+	showingFallbackFrame = true;
+	mainWindow.setFrame(x, y, width, height);
+}
+
+// Save the frame once a resize or drag settles, so a crash or force-quit keeps it too.
+const FRAME_SAVE_DELAY_MS = 500;
+let frameSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const saveFrameSoon = (): void => {
+	if (frameSaveTimer) clearTimeout(frameSaveTimer);
+	frameSaveTimer = setTimeout(() => {
+		const frame = mainWindow.getFrame();
+		// Never save a frame the next launch would reject or a fullscreen frame
+		// (entering fullscreen fires a resize), which would replace the last
+		// windowed one; nor the fallback frame until the user moves the window.
+		if (!isRestorable(frame, displayWorkAreas()) || fillsADisplay(frame, displayBounds())) return;
+		const { x, y, width, height } = DEFAULT_WINDOW_FRAME;
+		if (showingFallbackFrame && frame.x === x && frame.y === y && frame.width === width && frame.height === height) return;
+		showingFallbackFrame = false;
+		void updateSettings({ windowFrame: frame }).catch((error) =>
+			console.warn("[tabbo] could not save the window frame:", error),
+		);
+	}, FRAME_SAVE_DELAY_MS);
+};
+mainWindow.on("resize", saveFrameSoon);
+mainWindow.on("move", saveFrameSoon);
 
 // Push update lifecycle events to the webview. Registered after mainWindow
 // exists so rpc.send is available; the webview triggers checkForUpdate from
@@ -98,28 +155,13 @@ subscribeToUpdateStatus((status) => {
 });
 
 // Whether the webview has received at least one focus event.
-// Before first focus, RPC send is unreliable (Electrobun named-pipe gate),
-// so quit/close are dispatched directly without asking the webview.
+// Before first focus, RPC send was unreliable (Electrobun's first-focus gate,
+// last observed on 1.16), so quit/close are dispatched directly without asking
+// the webview.
 let hasFocused = false;
 mainWindow.on("focus", () => {
 	hasFocused = true;
 });
-
-// Perform the actual OS-level quit or window close.
-// Utils.quit() runs Electrobun's full shutdown sequence (before-quit event,
-// native stop, force-exit). mainWindow.close() sends a closeWindow FFI call
-// which triggers exitOnLastWindowClosed → quit() in BrowserWindow's close handler.
-function performWindowAction(kind: "quit" | "close"): void {
-	if (kind === "quit") {
-		Utils.quit();
-	} else {
-		if (mainWindow) {
-			mainWindow.close();
-		} else {
-			console.error("[tabbo] mainWindow is not defined; cannot close window");
-		}
-	}
-}
 
 // Map menu actions to webview messages
 const menuActionMap: Record<string, MenuAction> = {
@@ -137,16 +179,15 @@ const menuActionMap: Record<string, MenuAction> = {
 };
 
 setupMenu((action) => {
-	// Intercept quit and close before the generic map forward.
-	// If the webview hasn't focused yet, dispatch directly (nothing to lose).
+	// Intercept quit before the generic map forward.
+	// If the webview hasn't focused yet, quit directly (nothing to lose).
 	// Once focused, ask the webview so it can confirm any unsaved-changes guard.
-	if (action === "app:quit" || action === "window:close") {
-		const kind = action === "app:quit" ? "quit" : "close";
+	if (action === "app:quit") {
 		if (!hasFocused) {
-			performWindowAction(kind);
+			Utils.quit();
 			return;
 		}
-		rpc.send.menuAction({ action: kind === "quit" ? "quitRequested" : "closeRequested" });
+		rpc.send.menuAction({ action: "quitRequested" });
 		return;
 	}
 
@@ -158,12 +199,20 @@ setupMenu((action) => {
 
 // OS document opens (Finder double-click / Open With / drag onto the Dock
 // icon). macOS delivers these through application:openURLs:, which Electrobun
-// bridges to the open-url event as a file:// URL. WARM-ONLY: an open that
-// launches the app is dropped upstream - the native event fires before this
-// handler registers and Electrobun v1.16.0 does not queue it (verified
-// empirically; upstream needs a queued open-file delivery). The degraded cold
-// path is benign: the app launches without the file and a second open, now
-// warm, succeeds.
+// bridges to the open-url event as a file:// URL. On Electrobun 2.0.7-beta.24 a
+// document open that launches the app arrives about 0.9-1.3s after bun starts,
+// after this handler is registered, with the right URL (5 of 5 cold opens by
+// `open -a`, Open With, and a drop on the app icon, 2026-11-18, probe registered
+// at the top of this file), so the welcome screen shows briefly before the
+// document. Until the webview has asked (takePendingExternalOpen) the path is
+// held rather than pushed, so a slower page load can't lose it and it lands
+// after the crash-restore prompt. On 1.18.1 the open arrived about 7ms after
+// start, flushed from Electrobun's native buffer before this handler existed,
+// with garbage in place of the URL. That flush is unchanged in 2.x - our
+// reading: setURLOpenHandler in nativeWrapper.mm hands a threadsafe JSCallback
+// a c_str() from a local vector freed before the callback runs - so an open
+// that ever lands before the SDK registers its native handler would still
+// arrive garbled. The fix for that belongs upstream.
 Electrobun.events.on("open-url", (event: { data: { url: string } }) => {
 	const url = event.data?.url ?? "";
 	if (!url.startsWith("file://")) return; // no custom URL schemes in use
@@ -177,18 +226,11 @@ Electrobun.events.on("open-url", (event: { data: { url: string } }) => {
 	// only filters Finder's association list, not what a caller can hand this
 	// handler at runtime.
 	if (!/\.(tab|txt)$/i.test(path)) return;
-	// Push just the path; the webview reads it through the existing readFile
-	// RPC so read failures surface as its usual toast. Before first focus the
-	// push can be dropped by the named-pipe gate, which degrades to the benign
-	// cold-path behaviour (open again once the app is up).
-	rpc.send.openExternalFile({ path });
+	// Pass just the path; the webview reads it through the existing readFile
+	// RPC so read failures surface as its usual toast.
+	if (webviewTookPendingOpen) rpc.send.openExternalFile({ path });
+	else pendingExternalOpen = path;
 });
-
-// Persist last opened file on startup
-const settings = await loadSettings();
-if (settings.lastOpenedFile) {
-	console.log(`Last opened: ${settings.lastOpenedFile}`);
-}
 
 // Graceful engine-worker shutdown on app exit.
 // SIGPIPE from the parent dying usually suffices, but explicit teardown is cleaner.

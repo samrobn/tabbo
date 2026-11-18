@@ -1,7 +1,10 @@
 import { join, resolve } from "path";
 import { existsSync } from "fs";
-import type { CompilationError, GetLayoutResponse, LayoutResult } from "../shared/rpc-types";
+import type { Subprocess } from "bun";
+import type { GetLayoutResponse, LayoutResult } from "../shared/rpc-types";
 import { toErrorMessage } from "./error-utils";
+
+type WorkerProc = Subprocess<"pipe", "pipe", "pipe">;
 
 const WORKER_TIMEOUT_MS = 5_000;
 const VERSION_PROBE_TIMEOUT_MS = 2_000;
@@ -55,11 +58,13 @@ interface PendingRequest {
 }
 
 export class EngineWorker {
-	private proc: ReturnType<typeof Bun.spawn> | null = null;
+	// The binary is injectable so tests can stand in a process that misbehaves.
+	constructor(private readonly tabBinary: () => string = getTabBinary) {}
+
+	private proc: WorkerProc | null = null;
 	// spawnPromise is set while a spawn+probe is in progress; callers await it
 	// rather than starting a second concurrent spawn.
 	private spawnPromise: Promise<void> | null = null;
-	private stdoutBuffer = "";
 	private inFlight: InFlightRequest | null = null;
 	private pending: PendingRequest | null = null;
 	// Closed flag: set when this instance has been explicitly shut down.
@@ -81,9 +86,12 @@ export class EngineWorker {
 		}
 
 		try {
-			// Ensure the worker process is running. Use spawnPromise to serialise
-			// concurrent callers so we don't start multiple spawn+probe sequences.
-			if (!this.proc) {
+			// Ensure a verified worker is running. this.proc is set before the
+			// version probe finishes, so wait on any spawn in progress too: a
+			// request sent mid-probe would go to an unchecked process and race
+			// the probe for its reply. spawnPromise also serialises concurrent
+			// callers so only one spawn+probe runs.
+			if (!this.proc || this.spawnPromise) {
 				if (!this.spawnPromise) {
 					this.spawnPromise = this.spawn().finally(() => {
 						this.spawnPromise = null;
@@ -161,15 +169,14 @@ export class EngineWorker {
 		}
 
 		this.spawnHistory.push(now);
-		this.stdoutBuffer = "";
 		this.versionProbeResolve = null;
 		this.versionProbeReject = null;
 
-		const proc = Bun.spawn([getTabBinary(), "-worker"], {
+		const proc = Bun.spawn([this.tabBinary(), "-worker"], {
 			stdin: "pipe",
 			stdout: "pipe",
 			stderr: "pipe",
-			env: { ...Bun.env, TABFONTS: getFontsDir() },
+			env: { ...process.env, TABFONTS: getFontsDir() },
 		});
 
 		this.proc = proc;
@@ -180,39 +187,49 @@ export class EngineWorker {
 		this.startStderrDrain(proc);
 		this.startStdoutLoop(proc);
 
-		// Version probe: send the command, then wait for the loop to deliver the response.
-		await this.probeVersion();
-
-		// Monitor for unexpected exits.
+		// Monitor exits before probing, so a worker that dies at start-up fails
+		// the probe at once with its exit code rather than timing out.
 		proc.exited.then((code) => {
 			if (this.proc !== proc) return; // Superseded.
 			this.onProcExited(code);
 		});
+
+		try {
+			await this.probeVersion();
+		} catch (err) {
+			// Don't leave an unverified worker in place for the next request.
+			if (this.proc === proc) this.killProc();
+			throw err;
+		}
 	}
 
 	private async probeVersion(): Promise<void> {
-		const line = JSON.stringify({ cmd: "version" }) + "\n";
-		this.proc!.stdin.write(line);
-
 		// The stdout loop delivers lines via handleLine, which checks
-		// versionProbeResolve first. Set up the promise before writing so we
-		// don't race.
-		const responseLine = await Promise.race([
+		// versionProbeResolve first, so set the resolver up before writing.
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const response = Promise.race([
 			new Promise<string>((res, rej) => {
 				this.versionProbeResolve = res;
 				this.versionProbeReject = rej;
 			}),
-			new Promise<never>((_, reject) =>
-				setTimeout(
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(
 					() => reject(new Error("Version probe timed out.")),
 					VERSION_PROBE_TIMEOUT_MS,
-				),
-			),
+				);
+			}),
 		]);
 
-		// Always clear the probe callbacks.
-		this.versionProbeResolve = null;
-		this.versionProbeReject = null;
+		this.proc!.stdin.write(JSON.stringify({ cmd: "version" }) + "\n");
+
+		let responseLine: string;
+		try {
+			responseLine = await response;
+		} finally {
+			clearTimeout(timer);
+			this.versionProbeResolve = null;
+			this.versionProbeReject = null;
+		}
 
 		let parsed: { schema_version?: number };
 		try {
@@ -224,7 +241,6 @@ export class EngineWorker {
 		}
 
 		if (parsed.schema_version !== EXPECTED_SCHEMA_VERSION) {
-			this.killProc();
 			throw new Error(
 				`Engine protocol version mismatch (expected ${EXPECTED_SCHEMA_VERSION}, got ${parsed.schema_version}). Please restart Tabbo.`,
 			);
@@ -241,16 +257,20 @@ export class EngineWorker {
 	 * We must NOT assume each chunk is a complete line — Bun yields
 	 * chunk-aligned Uint8Array slices that can split mid-JSON.
 	 */
-	private startStdoutLoop(proc: ReturnType<typeof Bun.spawn>): void {
+	private startStdoutLoop(proc: WorkerProc): void {
 		const decoder = new TextDecoder();
+		let buffer = "";
 		(async () => {
 			for await (const chunk of proc.stdout) {
-				this.stdoutBuffer += decoder.decode(chunk, { stream: true });
+				// A killed or replaced worker's late output must not reach
+				// handleLine, where it would answer the new worker's probe or requests.
+				if (this.proc !== proc) return;
+				buffer += decoder.decode(chunk, { stream: true });
 
 				let nl: number;
-				while ((nl = this.stdoutBuffer.indexOf("\n")) !== -1) {
-					const line = this.stdoutBuffer.slice(0, nl).trim();
-					this.stdoutBuffer = this.stdoutBuffer.slice(nl + 1);
+				while ((nl = buffer.indexOf("\n")) !== -1) {
+					const line = buffer.slice(0, nl).trim();
+					buffer = buffer.slice(nl + 1);
 					if (line) this.handleLine(line);
 				}
 			}
@@ -261,15 +281,17 @@ export class EngineWorker {
 	}
 
 	/**
-	 * Continuous stderr drain. Must run for the lifetime of the process.
-	 * A 64 KB pipe buffer fills after ~1200 requests if undrained, blocking
-	 * the worker's stdout.
+	 * Continuous stderr drain for the lifetime of the process. Bun reads a piped
+	 * stream eagerly whether or not we do (measured on Bun 1.3.9: 20 MB of
+	 * unread output never blocked the child), so this isn't what keeps the
+	 * worker's stdout flowing; it exists for the debug log below, and so unread
+	 * output doesn't accumulate in Bun's memory over a long session.
 	 *
-	 * Logging is gated on TABBO_DEBUG_ENGINE to avoid spamming the bun process
+	 * Logging is gated on TABBO_DEBUG_ENGINE being set to any non-empty value, to avoid spamming the bun process
 	 * log on every keystroke. The engine emits at least one known-noisy warning
 	 * ("setting filename to %s") on every invocation via dbg1() in args.cc.
 	 */
-	private startStderrDrain(proc: ReturnType<typeof Bun.spawn>): void {
+	private startStderrDrain(proc: WorkerProc): void {
 		const debug = Boolean(process.env.TABBO_DEBUG_ENGINE);
 		const decoder = new TextDecoder();
 		(async () => {

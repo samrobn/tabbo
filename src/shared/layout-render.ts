@@ -50,7 +50,7 @@ export function substituteTextFont(family: string): string {
 // Editorial-highlight colours: match the exported PDF (ps_print P_S_GRAY/RED/BLUE)
 // so the on-screen preview shows the author's Q/@ markings identically. Gray =
 // PS `0.5 setgray`; red = CMYK(0,1,1,0); blue = CMYK(0.5,0.5,0,0).
-const HIGHLIGHT_FILL: Record<string, string> = { gray: "#808080", red: "#ff0000", blue: "#8080ff" };
+export const HIGHLIGHT_FILL = { gray: "#808080", red: "#ff0000", blue: "#8080ff" } as const;
 export function highlightFill(h?: "gray" | "red" | "blue"): string | undefined {
 	return h ? HIGHLIGHT_FILL[h] : undefined;
 }

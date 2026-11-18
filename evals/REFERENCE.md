@@ -79,8 +79,8 @@ Normally a local-engine change that alters rendered output means either the chan
 
 ## Note: upstream `TFM_PATH` is stale
 
-The upstream Makefile bakes an absolute font path (`TFM_PATH`) into the binary via the `TLOC` macro, and the committed upstream state points at a maintainer's personal directory (`/Users/j.w.j.burgers/Documents/TAB/`). The upstream setup guide tells new users to edit the Makefile and set `TLOC` to their own `Lute-Tab` checkout before building.
+The upstream Makefile bakes an absolute font path (`TFM_PATH`) into the binary via the `TLOC` macro, and the committed upstream state points at an upstream maintainer's home directory (see `TLOC` in `engine/Makefile`). The upstream setup guide tells new users to edit the Makefile and set `TLOC` to their own `Lute-Tab` checkout before building.
 
 We skip that step deliberately. `regenerate-goldens.ts` always sets `TABFONTS` at runtime, which overrides the compiled-in path. The binary works correctly regardless of the stale `TFM_PATH`.
 
-If you ever invoke `evals/reference/tab` manually without `TABFONTS`, expect `File In: Can't open /Users/j.w.j.burgers/...` messages. That is not a bug - always pass `TABFONTS=evals/reference/fonts` when invoking the reference binary by hand.
+If you ever invoke `evals/reference/tab` manually without `TABFONTS`, expect `File In: Can't open` messages naming the upstream maintainer's home directory. That is not a bug - always pass `TABFONTS=evals/reference/fonts` when invoking the reference binary by hand.

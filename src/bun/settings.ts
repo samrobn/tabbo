@@ -1,15 +1,16 @@
 import { join } from "path";
-import { mkdirSync, existsSync } from "fs";
-import { Utils } from "electrobun/bun";
-import type { Settings } from "../shared/rpc-types";
+import { mkdirSync, existsSync, renameSync } from "fs";
+import { Utils } from "electrobun/main";
+import type { RecentsChange, Settings } from "../shared/rpc-types";
+import { applyRecentsChange, migrateLastOpened } from "../shared/recent-list";
 
 const SETTINGS_FILENAME = "settings.json";
 
 const DEFAULT_SETTINGS: Settings = {
 	fontSize: 12,
 	theme: "light",
-	lastOpenedFile: null,
 	recentSaveDirs: [],
+	recentFiles: [],
 };
 
 function getSettingsPath(): string {
@@ -25,22 +26,43 @@ export async function loadSettings(): Promise<Settings> {
 		const path = getSettingsPath();
 		const file = Bun.file(path);
 		if (!(await file.exists())) return { ...DEFAULT_SETTINGS };
-		const raw = await file.json();
-		return { ...DEFAULT_SETTINGS, ...raw };
+		return { ...DEFAULT_SETTINGS, ...migrateLastOpened(await file.json()) };
 	} catch {
 		return { ...DEFAULT_SETTINGS };
 	}
 }
 
+// Write to a temporary file and rename it over the settings, so a read never
+// sees a half-written file (which would parse as invalid and fall back to the
+// defaults, losing every setting on the next write).
 export async function saveSettings(settings: Settings): Promise<void> {
-	await Bun.write(getSettingsPath(), JSON.stringify(settings, null, "\t"));
+	const path = getSettingsPath();
+	const temporary = `${path}.tmp`;
+	await Bun.write(temporary, JSON.stringify(settings, null, "\t"));
+	renameSync(temporary, path);
 }
 
-export async function updateSettings(
-	partial: Partial<Settings>,
-): Promise<Settings> {
-	const current = await loadSettings();
-	const updated: Settings = { ...current, ...partial };
-	await saveSettings(updated);
-	return updated;
+// The webview and the window-frame save both update settings; chaining the
+// read-modify-writes stops one overwriting the other with a stale copy.
+let pendingUpdate: Promise<unknown> = Promise.resolve();
+
+export function updateSettings(partial: Partial<Settings>): Promise<Settings> {
+	return updateSettingsWith(() => partial);
+}
+
+// The recent lists are updated here, inside the serialised read-modify-write,
+// so the webview never sends a whole list it may hold a stale or empty copy of.
+export function updateRecents(change: RecentsChange): Promise<Settings> {
+	return updateSettingsWith((current) => applyRecentsChange(current, change));
+}
+
+function updateSettingsWith(change: (current: Settings) => Partial<Settings>): Promise<Settings> {
+	const update = pendingUpdate.then(async () => {
+		const current = await loadSettings();
+		const updated: Settings = { ...current, ...change(current) };
+		await saveSettings(updated);
+		return updated;
+	});
+	pendingUpdate = update.catch(() => {});
+	return update;
 }
